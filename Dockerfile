@@ -1,15 +1,22 @@
-FROM gradle:4.7.0-jdk8-alpine AS build
-COPY --chown=gradle:gradle . /home/gradle/src
-WORKDIR /home/gradle/src
-RUN gradle build --no-daemon 
+FROM golang:1.22-alpine AS builder
+RUN apk add --update make git curl
 
-FROM openjdk:8-jre-slim
+ARG MODULE_NAME=backend
 
-EXPOSE 8080
+COPY . /home/${MODULE_NAME}/
 
-RUN mkdir /app
+WORKDIR /home/${MODULE_NAME}/
 
-COPY --from=build /home/gradle/src/build/libs/*.jar /app/spring-boot-application.jar
+RUN go build /home/${MODULE_NAME}/cmd/main/main.go
 
-ENTRYPOINT ["java", "-XX:+UnlockExperimentalVMOptions", "-XX:+UseCGroupMemoryLimitForHeap", "-Djava.security.egd=file:/dev/./urandom","-jar","/app/spring-boot-application.jar"]
+# Service
+FROM alpine:latest as production
+ARG MODULE_NAME=backend
+WORKDIR /root/
 
+COPY --from=builder /home/${MODULE_NAME}/config/config.yaml config/config.yaml
+COPY --from=builder /home/${MODULE_NAME}/main .
+
+RUN chown root:root main
+
+CMD ["./main"]
