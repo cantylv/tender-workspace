@@ -1,1 +1,23 @@
 version: "3.0"
+
+services:
+  platform:
+    build:
+      context: ./
+      dockerfile: dockerfile
+    env_file: .env
+    environment:
+    expose: 
+      - "8000"
+  postgresql:
+    image: postgresql:16
+    restart: always
+    container_name: postgres
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - services/postgresql/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+      - services/postgresql/data:/var/lib/postgresql/data
+    env_file: .env
