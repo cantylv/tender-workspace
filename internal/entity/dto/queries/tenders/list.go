@@ -1,4 +1,5 @@
-package entity
+// Used for get list of tenders
+package queries
 
 import (
 	"net/http"
@@ -6,25 +7,27 @@ import (
 	e "tender-workspace/internal/utils/myerrors"
 )
 
-type TenderQueryParameters struct {
-	Limit       int32
-	Offset      int32
+type ListTenders struct {
+	Limit       int
+	Offset      int
 	ServiceType string
 }
 
-func (q *TenderQueryParameters) GetParameters(r *http.Request) error {
-	limitStr := r.Header.Get("limit")
+func (q *ListTenders) GetParameters(r *http.Request) error {
 	q.Limit = 5
+	limitStr := r.Header.Get("limit")
 	if limitStr != "" {
 		limit, err := strconv.Atoi(limitStr)
 		if err != nil {
 			return err
 		}
 		if limit < 0 {
-			return e.ErrInvalidQueryParameterLimit
+			return e.ErrQPLimit
 		}
-		q.Limit = int32(limit)
+		q.Limit = limit
 	}
+
+	q.Offset = 0 // explicit
 	offsetStr := r.Header.Get("offset")
 	if offsetStr != "" {
 		offset, err := strconv.Atoi(limitStr)
@@ -32,10 +35,12 @@ func (q *TenderQueryParameters) GetParameters(r *http.Request) error {
 			return err
 		}
 		if offset < 0 {
-			return e.ErrInvalidQueryParameterOffset
+			return e.ErrQPOffset
 		}
-		q.Offset = int32(offset)
+		q.Offset = offset
 	}
+
+	q.ServiceType = "" // explicit
 	serviceType := r.Header.Get("service_type")
 	if serviceType != "" {
 		q.ServiceType = serviceType

@@ -43,19 +43,38 @@ CREATE TYPE IF NOT EXISTS tender_status AS ENUM (
 -- необходимо добавить еще id организации-исполнителя
 CREATE TABLE IF NOT EXISTS tender (
     id SERIAL PRIMARY KEY,
-    organization_id INT REFERENCES organization(id) ON DELETE CASCADE NOT NULL,
-    creator_username INT NOT NULL,
-    service_type tender_type NOT NULL,
     name TEXT NOT NULL,
     description TEXT NOT NULL,
+    type tender_type NOT NULL,
     status tender_status NOT NULL,
-    version INT NOT NULL
+    version INT NOT NULL,
+    organization_id INT REFERENCES organization(id) ON DELETE CASCADE NOT NULL,
+    creator_id INT REFERENCES employee(id) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS offer (
+CREATE TYPE IF NOT EXISTS creator_type AS ENUM (
+    'USER',
+    'AUTHOR',
+);
+
+CREATE TYPE IF NOT EXISTS bid_status AS ENUM (
+    'Created',
+    'Published',
+    'Canceled',
+    'Approved',
+    'Rejected'
+);
+
+CREATE TABLE IF NOT EXISTS bids (
     id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL,
+    status bid_status NOT NULL,
+    version INT NOT NULL,
     tender_id INT REFERENCES tender(id) ON DELETE CASCADE NOT NULL,
-    performer_id INT REFERENCES employee(id) ON DELETE CASCADE NOT NULL,
-    message TEXT NOT NULL,
-    version INT NOT NULL
+    creator_id INT REFERENCES employee(id) ON DELETE CASCADE NOT NULL,  
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

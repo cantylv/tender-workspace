@@ -1,14 +1,13 @@
 package entity
 
 type ResponseError struct {
-	Error string `json:"error" valid:"-"`
+	Error string
 }
 
 type ResponseDetail struct {
-	Detail string `json:"detail" valid:"-"`
+	Detail string
 }
 
 type ResponseReason struct {
-	Reason string `json:"reason" valid:"-"`
+	Reason string
 }
-
