@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"tender-workspace/internal/delivery/route"
+	f "tender-workspace/internal/utils/functions"
 	"tender-workspace/services/postgres"
 
 	"github.com/gorilla/mux"
@@ -17,6 +18,7 @@ import (
 func Run(logger *zap.Logger) {
 	psqlConn := postgres.Init(logger)
 
+	f.InitDtoValidator(logger)
 	r := mux.NewRouter()
 	handler := route.InitHTTPHandlers(r, psqlConn, logger)
 

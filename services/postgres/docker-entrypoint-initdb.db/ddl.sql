@@ -35,9 +35,9 @@ CREATE TYPE IF NOT EXISTS tender_type AS ENUM (
 );
 
 CREATE TYPE IF NOT EXISTS tender_status AS ENUM (
-    'CREATED',
-    'PUBLISHED',
-    'CLOSED'
+    'Created',
+    'Published',
+    'Closed'
 );
 
 -- необходимо добавить еще id организации-исполнителя
@@ -74,7 +74,9 @@ CREATE TABLE IF NOT EXISTS bids (
     status bid_status NOT NULL,
     version INT NOT NULL,
     tender_id INT REFERENCES tender(id) ON DELETE CASCADE NOT NULL,
-    creator_id INT REFERENCES employee(id) ON DELETE CASCADE NOT NULL,  
+    creator_id INT REFERENCES employee(id) ON DELETE CASCADE NOT NULL,
+    author_type creator_type NOT NULL,
+    organization_id INT REFERENCES organization(id) ON DELETE CASCADE NOT NULL,  
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -7,7 +7,7 @@ type BidInput struct {
 	Status          string `json:"status"`
 	TenderID        int    `json:"tenderId"`
 	OrganizationID  int    `json:"organizationId"`
-	CreatorUsername string `json:"creatorUsername"`
+	CreatorUsername string `json:"username"`
 }
 
 type BidUpdateDataInput struct {
@@ -24,4 +24,8 @@ type BidOutput struct {
 	AuthorID   int    `json:"authorId"`
 	Version    int    `json:"version"`
 	CreatedAt  string `json:"createdAt"`
+}
+
+type BidStatus struct {
+	Status string `json:"status"`
 }

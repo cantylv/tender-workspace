@@ -3,6 +3,7 @@ package queries
 import (
 	"net/http"
 	"strconv"
+	mc "tender-workspace/internal/utils/myconstants"
 	e "tender-workspace/internal/utils/myerrors"
 )
 
@@ -20,6 +21,7 @@ type BidStatus struct {
 }
 
 func (q *BidStatus) GetParameters(r *http.Request) error {
+
 	q.BidID = 0 // explicit
 	bidIdStr := r.Header.Get("bidId")
 	if bidIdStr == "" {
@@ -27,7 +29,7 @@ func (q *BidStatus) GetParameters(r *http.Request) error {
 	}
 	bidId, err := strconv.Atoi(bidIdStr)
 	if err != nil {
-		return err
+		return e.ErrTenderID
 	}
 	if bidId < 1 {
 		return e.ErrTenderID
@@ -52,23 +54,24 @@ func (q *UpdateBidStatus) GetParameters(r *http.Request) error {
 	q.BidID = 0 // explicit
 	bidIdStr := r.Header.Get("bidId")
 	if bidIdStr == "" {
-		return e.ErrExistTenderID
+		return e.ErrExistBidID
 	}
 	bidId, err := strconv.Atoi(bidIdStr)
 	if err != nil {
-		return err
+		return e.ErrBidID
 	}
 	if bidId < 1 {
-		return e.ErrTenderID
+		return e.ErrBidID
 	}
 	q.BidID = bidId
 
+	q.Status = "" // explicit
 	status := r.Header.Get("status")
 	if status == "" {
-		return e.ErrBadPermission
+		return e.ErrExistStatus
 	}
-	if _, ok := avaliableStatus[status]; !ok {
-		return e.ErrQPStatus
+	if _, ok := mc.AvaliableBidStatus[status]; !ok {
+		return e.ErrQPBidStatus
 	}
 	q.Status = status
 

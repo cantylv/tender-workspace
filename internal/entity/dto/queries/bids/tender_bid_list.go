@@ -21,7 +21,7 @@ func (q *TenderBidList) GetParameters(r *http.Request) error {
 	}
 	tenderId, err := strconv.Atoi(tenderIdStr)
 	if err != nil {
-		return err
+		return e.ErrTenderID
 	}
 	if tenderId < 1 {
 		return e.ErrTenderID

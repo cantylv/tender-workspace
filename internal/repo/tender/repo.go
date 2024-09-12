@@ -2,12 +2,14 @@ package tender
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	ent "tender-workspace/internal/entity"
-	"tender-workspace/internal/entity/dto/queries"
+	queries "tender-workspace/internal/entity/dto/queries/tenders"
+	tqp "tender-workspace/internal/entity/dto/queries/tenders"
 	f "tender-workspace/internal/utils/functions"
 	mc "tender-workspace/internal/utils/myconstants"
-	e "tender-workspace/internal/utils/myerrors"
 	"time"
 
 	"github.com/huandu/go-sqlbuilder"
@@ -25,20 +27,20 @@ type UserTendersProps struct {
 type UpdateTenderProps struct {
 	TenderID int
 	UserID   int
-	Status   string
 }
 
 // необходимо сделать откат версии
 // /tenders/{tenderId}/rollback/{version}:
 type Repo interface {
-	GetAll(ctx context.Context, params *queries.ListTenders) ([]ent.Tender, error)
-	Create(ctx context.Context, initData *ent.Tender) error
-	GetUserTenders(ctx context.Context, params *UserTendersProps) ([]ent.Tender, error)
-	IsResponsible(ctx context.Context, resp *ent.OrganizationResponsible) (bool, error)
-	ChangeStatus(ctx context.Context, tenderId int, status string) error
-	Update(ctx context.Context, newTenderData *ent.UpdateTenderData, params *UpdateTenderProps) error
+	GetAll(ctx context.Context, params *tqp.ListTenders) ([]*ent.Tender, error)
+	Create(ctx context.Context, initData *ent.Tender) (*ent.Tender, error)
+	GetUserTenders(ctx context.Context, params *UserTendersProps) ([]*ent.Tender, error)
+	ChangeStatus(ctx context.Context, tenderId int, status string) (*ent.Tender, error)
+	Update(ctx context.Context, newTenderData *ent.UpdateTenderData, params *UpdateTenderProps) (*ent.Tender, error)
 	GetTenderStatus(ctx context.Context, tenderId int) (string, error)
-	UpdateTenderStatus(ctx context.Context, tenderId int, status string) error
+	GetTender(ctx context.Context, tenderId int) (*ent.Tender, error)
+	GetOrganizationTenders(ctx context.Context, organizationId int) ([]*ent.Tender, error)
+	UpdateTenderStatus(ctx context.Context, tenderId int, status string) (*ent.Tender, error)
 }
 
 type RepoLayer struct {
@@ -69,11 +71,10 @@ var (
     ) 
     VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $8
-    )`
-	sqlRowCheckResponsibility = `SELECT 1 FROM organization_responsible WHERE organization_id=$1 AND user_id=$2`
+    ) RETURNING *`
 )
 
-func (r *RepoLayer) GetAll(ctx context.Context, params *queries.ListTenders) ([]ent.Tender, error) {
+func (r *RepoLayer) GetAll(ctx context.Context, params *tqp.ListTenders) ([]*ent.Tender, error) {
 	query, args := getGetAllSqlQuery(params)
 	rows, err := r.Client.Query(ctx, query, args...)
 	if err != nil {
@@ -81,7 +82,7 @@ func (r *RepoLayer) GetAll(ctx context.Context, params *queries.ListTenders) ([]
 	}
 	defer rows.Close()
 
-	var tenders []ent.Tender
+	var tenders []*ent.Tender
 	for rows.Next() {
 		var t ent.Tender
 		err = rows.Scan(
@@ -100,7 +101,7 @@ func (r *RepoLayer) GetAll(ctx context.Context, params *queries.ListTenders) ([]
 			r.Logger.Error(fmt.Sprintf("error while scanning sql result: %v", err), zap.String(mc.RequestID, requestId))
 			continue
 		}
-		tenders = append(tenders, t)
+		tenders = append(tenders, &t)
 	}
 	return tenders, nil
 }
@@ -114,9 +115,9 @@ func getGetAllSqlQuery(params *queries.ListTenders) (string, []any) {
 	return sb.Build()
 }
 
-func (r *RepoLayer) Create(ctx context.Context, initData *ent.Tender) error {
+func (r *RepoLayer) Create(ctx context.Context, initData *ent.Tender) (*ent.Tender, error) {
 	timeNow := f.FormatTime(time.Now())
-	tag, err := r.Client.Exec(ctx, sqlRowCreateTender,
+	row := r.Client.QueryRow(ctx, sqlRowCreateTender,
 		initData.Name,
 		initData.Description,
 		initData.Type,
@@ -126,46 +127,63 @@ func (r *RepoLayer) Create(ctx context.Context, initData *ent.Tender) error {
 		initData.CreatorID,
 		timeNow,
 	)
+	var t ent.Tender
+	err := row.Scan(
+		&t.ID,
+		&t.Name,
+		&t.Description,
+		&t.Type,
+		&t.Status,
+		&t.Version,
+		&t.OrganizationID,
+		&t.CreatorID,
+		&t.CreatedAt,
+	)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if tag.RowsAffected() == 0 {
-		return e.ErrNoRowsAffected
-	}
-	return nil
+	return &t, nil
 }
 
-func (r *RepoLayer) IsResponsible(ctx context.Context, resp *ent.OrganizationResponsible) (bool, error) {
-	row := r.Client.QueryRow(ctx, sqlRowCheckResponsibility, resp.OrganizationID, resp.UserID)
-	var isExist int
-	err := row.Scan(&isExist)
+func (r *RepoLayer) ChangeStatus(ctx context.Context, tenderId int, status string) (*ent.Tender, error) {
+	row := r.Client.QueryRow(ctx, `UPDATE tender SET status=$1 WHERE id=$2 RETURN *`, status, tenderId)
+	var t ent.Tender
+	err := row.Scan(
+		&t.ID,
+		&t.Name,
+		&t.Description,
+		&t.Type,
+		&t.Status,
+		&t.Version,
+		&t.OrganizationID,
+		&t.CreatorID,
+		&t.CreatedAt,
+	)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	return isExist == 1, nil
+	return &t, nil
 }
 
-func (r *RepoLayer) ChangeStatus(ctx context.Context, tenderId int, status string) error {
-	tag, err := r.Client.Exec(ctx, `UPDATE tender SET status=$1 WHERE id=$2`, status, tenderId)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return e.ErrNoRowsAffected
-	}
-	return nil
-}
-
-func (r *RepoLayer) Update(ctx context.Context, newTenderData *ent.UpdateTenderData, params *UpdateTenderProps) error {
+func (r *RepoLayer) Update(ctx context.Context, newTenderData *ent.UpdateTenderData, params *UpdateTenderProps) (*ent.Tender, error) {
 	query, args := getUpdateSqlQuery(newTenderData)
-	tag, err := r.Client.Exec(ctx, query, args...)
+	row := r.Client.QueryRow(ctx, query+"RETURN *", args...)
+	var t ent.Tender
+	err := row.Scan(
+		&t.ID,
+		&t.Name,
+		&t.Description,
+		&t.Type,
+		&t.Status,
+		&t.Version,
+		&t.OrganizationID,
+		&t.CreatorID,
+		&t.CreatedAt,
+	)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if tag.RowsAffected() == 0 {
-		return e.ErrNoRowsAffected
-	}
-	return nil
+	return &t, nil
 }
 
 func getUpdateSqlQuery(newTenderData *ent.UpdateTenderData) (string, []any) {
@@ -183,7 +201,7 @@ func getUpdateSqlQuery(newTenderData *ent.UpdateTenderData) (string, []any) {
 	return sb.Build()
 }
 
-func (r *RepoLayer) GetUserTenders(ctx context.Context, params *UserTendersProps) ([]ent.Tender, error) {
+func (r *RepoLayer) GetUserTenders(ctx context.Context, params *UserTendersProps) ([]*ent.Tender, error) {
 	query, args := getGetUserTendersSqlQuery(params)
 	rows, err := r.Client.Query(ctx, query, args...)
 	if err != nil {
@@ -191,7 +209,7 @@ func (r *RepoLayer) GetUserTenders(ctx context.Context, params *UserTendersProps
 	}
 	defer rows.Close()
 
-	var tenders []ent.Tender
+	tenders := make([]*ent.Tender, 0)
 	for rows.Next() {
 		var t ent.Tender
 		err = rows.Scan(
@@ -209,7 +227,7 @@ func (r *RepoLayer) GetUserTenders(ctx context.Context, params *UserTendersProps
 			r.Logger.Error(fmt.Sprintf("error while scanning sql result: %v", err), zap.String(mc.RequestID, requestId))
 			continue
 		}
-		tenders = append(tenders, t)
+		tenders = append(tenders, &t)
 	}
 	return tenders, nil
 }
@@ -231,13 +249,75 @@ func (r *RepoLayer) GetTenderStatus(ctx context.Context, tenderId int) (string, 
 	return status, nil
 }
 
-func (r *RepoLayer) UpdateTenderStatus(ctx context.Context, tenderId int, status string) error {
-	tag, err := r.Client.Exec(ctx, `UPDATE tender SET status=$1 WHERE id=$2`, status, tenderId)
+func (r *RepoLayer) UpdateTenderStatus(ctx context.Context, tenderId int, status string) (*ent.Tender, error) {
+	row := r.Client.QueryRow(ctx, `UPDATE tender SET status=$1 WHERE id=$2 SELECT *`, status, tenderId)
+	var t ent.Tender
+	err := row.Scan(
+		&t.ID,
+		&t.Name,
+		&t.Description,
+		&t.Type,
+		&t.Status,
+		&t.Version,
+		&t.OrganizationID,
+		&t.CreatorID,
+		&t.CreatedAt,
+	)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if tag.RowsAffected() == 0 {
-		return e.ErrNoRowsAffected
+	return &t, nil
+}
+
+func (r *RepoLayer) GetOrganizationTenders(ctx context.Context, organizationId int) ([]*ent.Tender, error) {
+	rows, err := r.Client.Query(ctx, `SELECT * FROM tender WHERE organization_id=$1`, organizationId)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
 	}
-	return nil
+
+	var tenders []*ent.Tender
+	for rows.Next() {
+		var t ent.Tender
+		err := rows.Scan(
+			&t.ID,
+			&t.Name,
+			&t.Description,
+			&t.Type,
+			&t.Status,
+			&t.Version,
+			&t.OrganizationID,
+			&t.CreatorID,
+			&t.CreatedAt,
+		)
+		if err != nil {
+			requestId := ctx.Value(mc.RequestID).(string)
+			r.Logger.Error(fmt.Sprintf("error while scanning sql result: %v", err), zap.String(mc.RequestID, requestId))
+			continue
+		}
+		tenders = append(tenders, &t)
+	}
+	return tenders, nil
+}
+
+func (r *RepoLayer) GetTender(ctx context.Context, tenderId int) (*ent.Tender, error) {
+	row := r.Client.QueryRow(ctx, `SELECT * FROM tender WHERE id=$1`, tenderId)
+	var t ent.Tender
+	err := row.Scan(
+		&t.ID,
+		&t.Name,
+		&t.Description,
+		&t.Type,
+		&t.Status,
+		&t.Version,
+		&t.OrganizationID,
+		&t.CreatorID,
+		&t.CreatedAt,
+	)
+	if err != nil {
+		return nil, nil
+	}
+	return &t, nil
 }

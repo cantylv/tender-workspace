@@ -19,7 +19,7 @@ func (q *UpdateBidData) GetParameters(r *http.Request) error {
 	}
 	bidId, err := strconv.Atoi(bidIdStr)
 	if err != nil {
-		return err
+		return e.ErrTenderID
 	}
 	if bidId < 1 {
 		return e.ErrTenderID

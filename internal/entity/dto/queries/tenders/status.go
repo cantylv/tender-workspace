@@ -3,7 +3,11 @@ package queries
 import (
 	"net/http"
 	"strconv"
+	"strings"
+	mc "tender-workspace/internal/utils/myconstants"
 	e "tender-workspace/internal/utils/myerrors"
+
+	"github.com/gorilla/mux"
 )
 
 type TenderStatus struct {
@@ -12,16 +16,14 @@ type TenderStatus struct {
 }
 
 func (q *TenderStatus) GetParameters(r *http.Request) error {
+	vars := mux.Vars(r)
 	q.TenderID = 0 // explicit
-	tenderIdStr := r.Header.Get("tenderId")
+	tenderIdStr := vars["tenderId"]
 	if tenderIdStr == "" {
 		return e.ErrExistTenderID
 	}
 	tenderId, err := strconv.Atoi(tenderIdStr)
-	if err != nil {
-		return err
-	}
-	if tenderId < 1 {
+	if err != nil || tenderId < 1 {
 		return e.ErrTenderID
 	}
 	q.TenderID = tenderId
@@ -41,25 +43,29 @@ type UpdateTenderStatus struct {
 }
 
 func (q *UpdateTenderStatus) GetParameters(r *http.Request) error {
+	vars := mux.Vars(r)
 	q.TenderID = 0 // explicit
-	tenderIdStr := r.Header.Get("tenderId")
+	tenderIdStr := vars["tenderId"]
 	if tenderIdStr == "" {
 		return e.ErrExistTenderID
 	}
 	tenderId, err := strconv.Atoi(tenderIdStr)
-	if err != nil {
-		return err
-	}
-	if tenderId < 1 {
+	if err != nil || tenderId < 1 {
 		return e.ErrTenderID
 	}
 	q.TenderID = tenderId
 
+	q.Status = "" // explicit
 	status := r.Header.Get("status")
 	if status == "" {
 		return e.ErrTenderStatus
 	}
-	q.Status = status
+	statusLower := strings.ToLower(status)
+	if _, ok := mc.AvaliableTenderStatus[statusLower]; !ok {
+		return e.ErrQPChangeStatus
+	}
+	runes := []rune(statusLower)
+	q.Status = strings.ToUpper(string(runes[0])) + string(statusLower[1:len(runes)])
 
 	username := r.Header.Get("username")
 	if username == "" {

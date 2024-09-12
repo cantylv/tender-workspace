@@ -22,8 +22,6 @@ func NewResponseProps(w http.ResponseWriter, payload any, codeStatus int, conten
 	}
 }
 
-// Response
-// Forms server response. For marshalling uses easyjson (mailru).
 func Response(props ResponseProps) {
 	props.W.Header().Add("Content-Type", props.ContentType)
 	body, err := json.Marshal(props.Payload)

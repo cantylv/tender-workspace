@@ -12,7 +12,7 @@ import (
 
 func InitHTTPHandlers(router *mux.Router, psqlConn *pgx.Conn, logger *zap.Logger) http.Handler {
 	router = router.PathPrefix("/api").Subrouter()
-	tender.InitHandlers(router, psqlConn)
+	tender.InitHandlers(router, psqlConn, logger)
 
 	return middlewares.Init(router, logger)
 }

@@ -1,9 +1,10 @@
-// Used for get list of tenders
 package queries
 
 import (
 	"net/http"
 	"strconv"
+	"strings"
+	mc "tender-workspace/internal/utils/myconstants"
 	e "tender-workspace/internal/utils/myerrors"
 )
 
@@ -42,8 +43,14 @@ func (q *ListTenders) GetParameters(r *http.Request) error {
 
 	q.ServiceType = "" // explicit
 	serviceType := r.Header.Get("service_type")
-	if serviceType != "" {
-		q.ServiceType = serviceType
+	if serviceType == "" {
+		return nil
 	}
+	serviceType = strings.ToLower(serviceType)
+	if _, ok := mc.AvaliableServiceType[serviceType]; !ok {
+		return e.ErrQPServiceType
+	}
+	runes := []rune(serviceType)
+	q.ServiceType = strings.ToUpper(string(runes[0])) + string(serviceType[1:len(runes)])
 	return nil
 }

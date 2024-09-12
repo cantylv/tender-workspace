@@ -2,11 +2,12 @@ package bids
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	ent "tender-workspace/internal/entity"
 	f "tender-workspace/internal/utils/functions"
 	mc "tender-workspace/internal/utils/myconstants"
-	e "tender-workspace/internal/utils/myerrors"
 	"time"
 
 	"github.com/huandu/go-sqlbuilder"
@@ -14,11 +15,10 @@ import (
 	"go.uber.org/zap"
 )
 
-type TenderBidsRepoQP struct {
-	TenderID string
-	UserID   int
-	Limit    int32
-	Offset   int32
+type UpdateBid struct {
+	BidID       int
+	Name        string
+	Description string
 }
 
 var (
@@ -29,20 +29,21 @@ var (
 		version, 
 		tendor_id, 
 		creator_id,
+		organization_id,
 		created_at,
 		updated_at)
 	VALUES (
 		$1, $2, $3, $4, $5, $6, $7, $7
-	)`
+	) RETURN *`
 )
 
 type Repo interface {
-	Create(ctx context.Context, initData *ent.Bid) error
-	GetUserBids(ctx context.Context, params *ent.UserRepoQP) ([]ent.Bid, error)
-	GetTenderBids(ctx context.Context, params *ent.TenderBidsRepoQP) ([]ent.Bid, error)
+	Create(ctx context.Context, initData *ent.Bid) (*ent.Bid, error)
+	GetBid(ctx context.Context, bidId int) (*ent.Bid, error)
 	GetStatus(ctx context.Context, bidId int) (string, error)
-	UpdateStatus(ctx context.Context, bidId int, status string) error
-	Update(ctx context.Context, newData *ent.UpdateBidData, bidId int) error
+	UpdateStatus(ctx context.Context, bidId int, status string) (*ent.Bid, error)
+	Update(ctx context.Context, newData *UpdateBid) (*ent.Bid, error)
+	GetOrganizationBids(ctx context.Context, organizationId int) ([]*ent.Bid, error)
 }
 
 type RepoLayer struct {
@@ -58,98 +59,34 @@ func NewRepoLayer(client *pgx.Conn) *RepoLayer {
 	}
 }
 
-func (r *RepoLayer) Create(ctx context.Context, initData *ent.Bid) error {
+func (r *RepoLayer) Create(ctx context.Context, initData *ent.Bid) (*ent.Bid, error) {
 	timeNow := f.FormatTime(time.Now())
-	tag, err := r.Client.Exec(ctx, sqlRowCreateBid,
+	row := r.Client.QueryRow(ctx, sqlRowCreateBid,
 		initData.Name,
 		initData.Description,
 		initData.Status,
 		initData.Version,
 		initData.TenderID,
 		initData.CreatorID,
+		initData.OrganizationID,
 		timeNow,
 	)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return e.ErrNoRowsAffected
-	}
-	return nil
-}
-
-func (r *RepoLayer) GetUserBids(ctx context.Context, params *ent.UserRepoQP) ([]ent.Bid, error) {
-	query, args := getGetUserBidsSqlQuery(params)
-	rows, err := r.Client.Query(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var bids []ent.Bid
-	for rows.Next() {
-		var b ent.Bid
-		err = rows.Scan(
-			&b.ID,
-			&b.Name,
-			&b.Description,
-			&b.Status,
-			&b.Version,
-			&b.TenderID,
-			&b.CreatorID,
-			&b.CreatedAt,
-		)
-		if err != nil {
-			requestId := ctx.Value(mc.RequestID).(string)
-			r.Logger.Error(fmt.Sprintf("error while scanning sql result: %v", err), zap.String(mc.RequestID, requestId))
-			continue
-		}
-		bids = append(bids, b)
-	}
-	return bids, nil
-}
-
-func getGetUserBidsSqlQuery(params *ent.UserRepoQP) (string, []any) {
-	sb := sqlbuilder.NewSelectBuilder().Select("*").From("bids")
-	sb = sb.Where(sb.Equal("creator_id", params.UserID))
-	sb = sb.Offset(int(params.Offset)).Limit(int(params.Limit)).OrderBy("name").Asc()
-	return sb.Build()
-}
-
-func (r *RepoLayer) GetTenderBids(ctx context.Context, params *ent.TenderBidsRepoQP) ([]ent.Bid, error) {
-	query, args := getGetAllSqlQuery(params)
-	rows, err := r.Client.Query(ctx, query, args...)
+	var bid ent.Bid
+	err := row.Scan(
+		&bid.ID,
+		&bid.Name,
+		&bid.Description,
+		&bid.Status,
+		&bid.Version,
+		&bid.TenderID,
+		&bid.CreatorID,
+		&bid.OrganizationID,
+		&bid.Status,
+	)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var bids []ent.Bid
-	for rows.Next() {
-		var b ent.Bid
-		err = rows.Scan(
-			&b.ID,
-			&b.Name,
-			&b.Status,
-			&b.Version,
-			&b.TenderID,
-			&b.CreatorID,
-			&b.CreatedAt,
-		)
-		if err != nil {
-			requestId := ctx.Value(mc.RequestID).(string)
-			r.Logger.Error(fmt.Sprintf("error while scanning sql result: %v", err), zap.String(mc.RequestID, requestId))
-			continue
-		}
-		bids = append(bids, b)
-	}
-	return bids, nil
-}
-
-func getGetAllSqlQuery(params *ent.TenderBidsRepoQP) (string, []any) {
-	sb := sqlbuilder.NewSelectBuilder().Select("*").From("bids")
-	sb = sb.Offset(int(params.Offset)).Limit(int(params.Limit)).OrderBy("name").Asc()
-	return sb.Build()
+	return &bid, nil
 }
 
 func (r *RepoLayer) GetStatus(ctx context.Context, bidId int) (string, error) {
@@ -162,31 +99,45 @@ func (r *RepoLayer) GetStatus(ctx context.Context, bidId int) (string, error) {
 	return status, nil
 }
 
-func (r *RepoLayer) UpdateStatus(ctx context.Context, bidId int, status string) error {
-	tag, err := r.Client.Exec(ctx, `UPDATE bids SET status=$1 WHERE id=$2`, status, bidId)
+func (r *RepoLayer) UpdateStatus(ctx context.Context, bidId int, status string) (*ent.Bid, error) {
+	row := r.Client.QueryRow(ctx, `UPDATE bids SET status=$1 WHERE id=$2 RETURN *`, status, bidId)
+	var b ent.Bid
+	err := row.Scan(
+		&b.ID,
+		&b.Name,
+		&b.Status,
+		&b.Version,
+		&b.TenderID,
+		&b.CreatorID,
+		&b.CreatedAt,
+	)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if tag.RowsAffected() == 0 {
-		return e.ErrNoRowsAffected
-	}
-	return nil
+	return &b, nil
 }
 
-func (r *RepoLayer) Update(ctx context.Context, newData *ent.UpdateBidData, bidId int) error {
-	query, args := getUpdateSqlQuery(newData, bidId)
-	tag, err := r.Client.Exec(ctx, query, args...)
+func (r *RepoLayer) Update(ctx context.Context, newData *UpdateBid) (*ent.Bid, error) {
+	query, args := getUpdateSqlQuery(newData)
+	row := r.Client.QueryRow(ctx, query+"RETURN *", args...)
+	var b ent.Bid
+	err := row.Scan(
+		&b.ID,
+		&b.Name,
+		&b.Status,
+		&b.Version,
+		&b.TenderID,
+		&b.CreatorID,
+		&b.CreatedAt,
+	)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if tag.RowsAffected() == 0 {
-		return e.ErrNoRowsAffected
-	}
-	return nil
+	return &b, err
 }
 
-func getUpdateSqlQuery(newTenderData *ent.UpdateBidData, bidId int) (string, []any) {
-	sb := sqlbuilder.NewUpdateBuilder().Update("bids").Where("bidId", fmt.Sprintf("%d", bidId))
+func getUpdateSqlQuery(newTenderData *UpdateBid) (string, []any) {
+	sb := sqlbuilder.NewUpdateBuilder().Update("bids").Where("bidId", fmt.Sprintf("%d", newTenderData.BidID))
 	if newTenderData.Name != "" {
 		sb = sb.Set("name", newTenderData.Name)
 	}
@@ -195,4 +146,57 @@ func getUpdateSqlQuery(newTenderData *ent.UpdateBidData, bidId int) (string, []a
 	}
 	sb = sb.Set("updated_at", f.FormatTime(time.Now()))
 	return sb.Build()
+}
+
+func (r *RepoLayer) GetOrganizationBids(ctx context.Context, organizationId int) ([]*ent.Bid, error) {
+	rows, err := r.Client.Query(ctx, `SELECT * FROM bids WHERE organization_id=$1`, organizationId)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var bids []*ent.Bid
+	for rows.Next() {
+		var bid ent.Bid
+		err := rows.Scan(
+			&bid.ID,
+			&bid.Name,
+			&bid.Description,
+			&bid.Status,
+			&bid.Version,
+			&bid.TenderID,
+			&bid.CreatorID,
+			&bid.OrganizationID,
+			&bid.Status,
+		)
+		if err != nil {
+			requestId := ctx.Value(mc.RequestID).(string)
+			r.Logger.Error(fmt.Sprintf("error while scanning sql result: %v", err), zap.String(mc.RequestID, requestId))
+			continue
+		}
+		bids = append(bids, &bid)
+	}
+	return bids, nil
+}
+
+func (r *RepoLayer) GetBid(ctx context.Context, bidId int) (*ent.Bid, error) {
+	row := r.Client.QueryRow(ctx, `SELECT * FROM bids WHERE id=$1`, bidId)
+	var bid ent.Bid
+	err := row.Scan(
+		&bid.ID,
+		&bid.Name,
+		&bid.Description,
+		&bid.Status,
+		&bid.Version,
+		&bid.TenderID,
+		&bid.CreatorID,
+		&bid.OrganizationID,
+		&bid.Status,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &bid, nil
 }

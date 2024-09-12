@@ -16,6 +16,6 @@ func Ping(w http.ResponseWriter, r *http.Request) {
 		f.Response(propsError)
 		return
 	}
-	propsResponse := f.NewResponseProps(w, "ok", http.StatusOK, mc.TextPlain)
+	propsResponse := f.NewResponseProps(w, ent.ResponseDetail{Detail: "ok"}, http.StatusOK, mc.ApplicationJson)
 	f.Response(propsResponse)
 }

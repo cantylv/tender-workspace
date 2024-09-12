@@ -1,4 +1,4 @@
-package tender
+package bids
 
 import (
 	"encoding/json"
@@ -7,8 +7,8 @@ import (
 	"net/http"
 	ent "tender-workspace/internal/entity"
 	"tender-workspace/internal/entity/dto"
-	tqp "tender-workspace/internal/entity/dto/queries/tenders"
-	"tender-workspace/internal/usecase/tender"
+	bqp "tender-workspace/internal/entity/dto/queries/bids"
+	"tender-workspace/internal/usecase/bids"
 	f "tender-workspace/internal/utils/functions"
 	mc "tender-workspace/internal/utils/myconstants"
 	e "tender-workspace/internal/utils/myerrors"
@@ -17,58 +17,18 @@ import (
 )
 
 type DeliveryLayer struct {
-	ucTender tender.Usecase
-	logger   *zap.Logger
+	ucBids bids.Usecase
+	logger *zap.Logger
 }
 
-func NewDeliveryLayer(ucTender tender.Usecase, logger *zap.Logger) *DeliveryLayer {
+func NewDeliveryLayer(ucBids bids.Usecase, logger *zap.Logger) *DeliveryLayer {
 	return &DeliveryLayer{
-		ucTender: ucTender,
-		logger:   logger,
+		ucBids: ucBids,
+		logger: logger,
 	}
 }
 
-func (d *DeliveryLayer) GetListOfTenders(w http.ResponseWriter, r *http.Request) {
-	requestId := r.Context().Value(mc.RequestID).(string)
-	if r.Method != "GET" {
-		d.logger.Info(e.ErrMethodNotAllowed.Error(), zap.String(mc.RequestID, requestId))
-		propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: e.ErrMethodNotAllowed.Error()}, http.StatusMethodNotAllowed, mc.ApplicationJson)
-		f.Response(propsError)
-		return
-	}
-	queryParams := new(tqp.ListTenders)
-	err := queryParams.GetParameters(r)
-	if err != nil {
-		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
-		if errors.Is(err, e.ErrQPLimit) || errors.Is(err, e.ErrQPOffset) || errors.Is(err, e.ErrQPServiceType) {
-			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusBadRequest, mc.ApplicationJson)
-			f.Response(propsError)
-			return
-		}
-		propsError := f.NewResponseProps(w, ent.ResponseError{Error: e.ErrInternal.Error()},
-			http.StatusInternalServerError, mc.ApplicationJson)
-		f.Response(propsError)
-		return
-	}
-
-	tenders, err := d.ucTender.GetTenders(r.Context(), queryParams)
-	if err != nil {
-		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
-		propsError := f.NewResponseProps(w, ent.ResponseError{Error: e.ErrInternal.Error()},
-			http.StatusInternalServerError, mc.ApplicationJson)
-		f.Response(propsError)
-		return
-	}
-	if tenders == nil {
-		tenders = make([]*ent.Tender, 0)
-	}
-
-	tendersOutput := dto.NewArrayTenderOutput(tenders)
-	responseData := f.NewResponseProps(w, tendersOutput, http.StatusOK, mc.ApplicationJson)
-	f.Response(responseData)
-}
-
-func (d *DeliveryLayer) CreateNewTender(w http.ResponseWriter, r *http.Request) {
+func (d *DeliveryLayer) CreateBid(w http.ResponseWriter, r *http.Request) {
 	requestId := r.Context().Value(mc.RequestID).(string)
 	if r.Method != "POST" {
 		d.logger.Info(e.ErrMethodNotAllowed.Error(), zap.String(mc.RequestID, requestId))
@@ -84,15 +44,15 @@ func (d *DeliveryLayer) CreateNewTender(w http.ResponseWriter, r *http.Request) 
 		f.Response(propsError)
 		return
 	}
-	var tenderData dto.TenderInput
-	err = json.Unmarshal(body, &tenderData)
+	var bidData dto.BidInput
+	err = json.Unmarshal(body, &bidData)
 	if err != nil {
 		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
 		propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: e.ErrRequestBody.Error()}, http.StatusBadRequest, mc.ApplicationJson)
 		f.Response(propsError)
 		return
 	}
-	isValid, err := f.Validate(tenderData)
+	isValid, err := f.Validate(bidData)
 	if err != nil || !isValid {
 		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
 		propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: e.ErrRequestBody.Error()}, http.StatusBadRequest, mc.ApplicationJson)
@@ -100,7 +60,7 @@ func (d *DeliveryLayer) CreateNewTender(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	tender, err := d.ucTender.CreateTender(r.Context(), &tenderData)
+	bid, err := d.ucBids.CreateBid(r.Context(), &bidData)
 	if err != nil {
 		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
 		if errors.Is(err, e.ErrBadStatusCreate) || errors.Is(err, e.ErrQPServiceType) {
@@ -118,12 +78,12 @@ func (d *DeliveryLayer) CreateNewTender(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	tenderOutput := dto.NewTenderOutput(tender)
+	tenderOutput := dto.NewBidOutput(bid)
 	responseData := f.NewResponseProps(w, tenderOutput, http.StatusOK, mc.ApplicationJson)
 	f.Response(responseData)
 }
 
-func (d *DeliveryLayer) GetUserTenders(w http.ResponseWriter, r *http.Request) {
+func (d *DeliveryLayer) GetUserBids(w http.ResponseWriter, r *http.Request) {
 	requestId := r.Context().Value(mc.RequestID).(string)
 	if r.Method != "GET" {
 		d.logger.Info(e.ErrMethodNotAllowed.Error(), zap.String(mc.RequestID, requestId))
@@ -132,7 +92,7 @@ func (d *DeliveryLayer) GetUserTenders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	queryParams := new(tqp.ListUserTenders)
+	queryParams := new(bqp.ListUserBids)
 	err := queryParams.GetParameters(r)
 	if err != nil {
 		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
@@ -152,10 +112,10 @@ func (d *DeliveryLayer) GetUserTenders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenders, err := d.ucTender.GetUserTenders(r.Context(), queryParams)
+	bids, err := d.ucBids.GetUserBids(r.Context(), queryParams)
 	if err != nil {
 		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
-		if errors.Is(err, e.ErrUserIsNotResponsible) || errors.Is(err, e.ErrUserExist) {
+		if errors.Is(err, e.ErrUserExist) || errors.Is(err, e.ErrUserIsNotResponsible) {
 			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusUnauthorized, mc.ApplicationJson)
 			f.Response(propsError)
 			return
@@ -171,8 +131,8 @@ func (d *DeliveryLayer) GetUserTenders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenderOutput := dto.NewArrayTenderOutput(tenders)
-	responseData := f.NewResponseProps(w, tenderOutput, http.StatusOK, mc.ApplicationJson)
+	bidsOutput := dto.NewArrayBidOutput(bids)
+	responseData := f.NewResponseProps(w, bidsOutput, http.StatusOK, mc.ApplicationJson)
 	f.Response(responseData)
 }
 
@@ -185,7 +145,7 @@ func (d *DeliveryLayer) GetTenderStatus(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	queryParams := new(tqp.TenderStatus)
+	queryParams := new(bqp.BidStatus)
 	err := queryParams.GetParameters(r)
 	if err != nil {
 		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
@@ -205,7 +165,7 @@ func (d *DeliveryLayer) GetTenderStatus(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	status, err := d.ucTender.GetTenderStatus(r.Context(), queryParams)
+	status, err := d.ucBids.GetBidStatus(r.Context(), queryParams)
 	if err != nil {
 		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
 		if errors.Is(err, e.ErrUserExist) || errors.Is(err, e.ErrResponsibilty) {
@@ -213,7 +173,7 @@ func (d *DeliveryLayer) GetTenderStatus(w http.ResponseWriter, r *http.Request) 
 			f.Response(propsError)
 			return
 		}
-		if errors.Is(err, e.ErrNoTenders) {
+		if errors.Is(err, e.ErrNoBids) {
 			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusBadRequest, mc.ApplicationJson)
 			f.Response(propsError)
 			return
@@ -224,11 +184,11 @@ func (d *DeliveryLayer) GetTenderStatus(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	responseData := f.NewResponseProps(w, dto.TenderStatus{Status: status}, http.StatusOK, mc.ApplicationJson)
+	responseData := f.NewResponseProps(w, dto.BidStatus{Status: status}, http.StatusOK, mc.ApplicationJson)
 	f.Response(responseData)
 }
 
-func (d *DeliveryLayer) UpdateTenderStatus(w http.ResponseWriter, r *http.Request) {
+func (d *DeliveryLayer) UpdateBidStatus(w http.ResponseWriter, r *http.Request) {
 	requestId := r.Context().Value(mc.RequestID).(string)
 	if r.Method != "PUT" {
 		d.logger.Info(e.ErrMethodNotAllowed.Error(), zap.String(mc.RequestID, requestId))
@@ -237,14 +197,14 @@ func (d *DeliveryLayer) UpdateTenderStatus(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	queryParams := new(tqp.UpdateTenderStatus)
+	queryParams := new(bqp.UpdateBidStatus)
 	err := queryParams.GetParameters(r)
 	if err != nil {
 		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
-		if errors.Is(err, e.ErrExistTenderID) ||
-			errors.Is(err, e.ErrTenderID) ||
-			errors.Is(err, e.ErrTenderStatus) ||
-			errors.Is(err, e.ErrQPChangeStatus) {
+		if errors.Is(err, e.ErrExistBidID) ||
+			errors.Is(err, e.ErrBidID) ||
+			errors.Is(err, e.ErrExistStatus) ||
+			errors.Is(err, e.ErrQPBidStatus) {
 			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusBadRequest, mc.ApplicationJson)
 			f.Response(propsError)
 			return
@@ -260,15 +220,15 @@ func (d *DeliveryLayer) UpdateTenderStatus(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	tender, err := d.ucTender.UpdateTenderStatus(r.Context(), queryParams)
+	bid, err := d.ucBids.UpdateBidStatus(r.Context(), queryParams)
 	if err != nil {
 		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
-		if errors.Is(err, e.ErrUserExist) || errors.Is(err, e.ErrResponsibilty) {
+		if errors.Is(err, e.ErrUserExist) {
 			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusUnauthorized, mc.ApplicationJson)
 			f.Response(propsError)
 			return
 		}
-		if errors.Is(err, e.ErrNoTenders) {
+		if errors.Is(err, e.ErrNoBids) {
 			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusBadRequest, mc.ApplicationJson)
 			f.Response(propsError)
 			return
@@ -279,12 +239,12 @@ func (d *DeliveryLayer) UpdateTenderStatus(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	tenderOutput := dto.NewTenderOutput(tender)
-	responseData := f.NewResponseProps(w, tenderOutput, http.StatusOK, mc.ApplicationJson)
+	bidOutput := dto.NewBidOutput(bid)
+	responseData := f.NewResponseProps(w, bidOutput, http.StatusOK, mc.ApplicationJson)
 	f.Response(responseData)
 }
 
-func (d *DeliveryLayer) UpdateTender(w http.ResponseWriter, r *http.Request) {
+func (d *DeliveryLayer) UpdateBid(w http.ResponseWriter, r *http.Request) {
 	requestId := r.Context().Value(mc.RequestID).(string)
 	if r.Method != "PATCH" {
 		d.logger.Info(e.ErrMethodNotAllowed.Error(), zap.String(mc.RequestID, requestId))
@@ -293,11 +253,11 @@ func (d *DeliveryLayer) UpdateTender(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	queryParams := new(tqp.TenderUpdate)
+	queryParams := new(bqp.UpdateBidData)
 	err := queryParams.GetParameters(r)
 	if err != nil {
 		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
-		if errors.Is(err, e.ErrExistTenderID) || errors.Is(err, e.ErrTenderID) {
+		if errors.Is(err, e.ErrExistBidID) || errors.Is(err, e.ErrBidID) {
 			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusBadRequest, mc.ApplicationJson)
 			f.Response(propsError)
 			return
@@ -320,15 +280,15 @@ func (d *DeliveryLayer) UpdateTender(w http.ResponseWriter, r *http.Request) {
 		f.Response(propsError)
 		return
 	}
-	var tenderData dto.TenderUpdateDataInput
-	err = json.Unmarshal(body, &tenderData)
+	var bidData dto.BidUpdateDataInput
+	err = json.Unmarshal(body, &bidData)
 	if err != nil {
 		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
 		propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: e.ErrRequestBody.Error()}, http.StatusBadRequest, mc.ApplicationJson)
 		f.Response(propsError)
 		return
 	}
-	isValid, err := f.Validate(tenderData)
+	isValid, err := f.Validate(bidData)
 	if err != nil || !isValid {
 		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
 		propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: e.ErrRequestBody.Error()}, http.StatusBadRequest, mc.ApplicationJson)
@@ -336,7 +296,7 @@ func (d *DeliveryLayer) UpdateTender(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tender, err := d.ucTender.UpdateTender(r.Context(), &tenderData, queryParams)
+	bid, err := d.ucBids.UpdateBid(r.Context(), &bidData, queryParams)
 	if err != nil {
 		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
 		if errors.Is(err, e.ErrUserExist) || errors.Is(err, e.ErrResponsibilty) {
@@ -355,7 +315,7 @@ func (d *DeliveryLayer) UpdateTender(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenderOutput := dto.NewTenderOutput(tender)
-	responseData := f.NewResponseProps(w, tenderOutput, http.StatusOK, mc.ApplicationJson)
+	bidOutput := dto.NewBidOutput(bid)
+	responseData := f.NewResponseProps(w, bidOutput, http.StatusOK, mc.ApplicationJson)
 	f.Response(responseData)
 }
