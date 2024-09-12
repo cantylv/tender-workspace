@@ -13,8 +13,6 @@ import (
 	"go.uber.org/zap"
 )
 
-
-
 type AccessLogStart struct {
 	UserAgent      string
 	RealIp         string

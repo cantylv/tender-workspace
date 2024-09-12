@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS employee (
+CREATE TABLE employee (
     id SERIAL PRIMARY KEY,
     username VARCHAR(50) UNIQUE NOT NULL,
     first_name VARCHAR(50),
@@ -7,13 +7,13 @@ CREATE TABLE IF NOT EXISTS employee (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TYPE IF NOT EXISTS organization_type AS ENUM (
+CREATE TYPE organization_type AS ENUM (
     'IE',
     'LLC',
     'JSC'
 );
 
-CREATE TABLE IF NOT EXISTS organization (
+CREATE TABLE organization (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     description TEXT,
@@ -22,26 +22,26 @@ CREATE TABLE IF NOT EXISTS organization (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS organization_responsible (
+CREATE TABLE organization_responsible (
     id SERIAL PRIMARY KEY,
     organization_id INT REFERENCES organization(id) ON DELETE CASCADE,
     user_id INT REFERENCES employee(id) ON DELETE CASCADE
 );
 
-CREATE TYPE IF NOT EXISTS tender_type AS ENUM (
+CREATE TYPE tender_type AS ENUM (
     'Construction',
     'Delivery',
     'Manufacture'
 );
 
-CREATE TYPE IF NOT EXISTS tender_status AS ENUM (
+CREATE TYPE tender_status AS ENUM (
     'Created',
     'Published',
     'Closed'
 );
 
 -- необходимо добавить еще id организации-исполнителя
-CREATE TABLE IF NOT EXISTS tender (
+CREATE TABLE tender (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     description TEXT NOT NULL,
@@ -54,12 +54,12 @@ CREATE TABLE IF NOT EXISTS tender (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TYPE IF NOT EXISTS creator_type AS ENUM (
-    'USER',
-    'AUTHOR',
+CREATE TYPE creator_type AS ENUM (
+    'User',
+    'Author'
 );
 
-CREATE TYPE IF NOT EXISTS bid_status AS ENUM (
+CREATE TYPE bid_status AS ENUM (
     'Created',
     'Published',
     'Canceled',
@@ -67,7 +67,7 @@ CREATE TYPE IF NOT EXISTS bid_status AS ENUM (
     'Rejected'
 );
 
-CREATE TABLE IF NOT EXISTS bids (
+CREATE TABLE bids (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     description TEXT NOT NULL,

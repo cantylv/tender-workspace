@@ -29,7 +29,7 @@ func NewDeliveryLayer(ucTender tender.Usecase, logger *zap.Logger) *DeliveryLaye
 }
 
 func (d *DeliveryLayer) GetListOfTenders(w http.ResponseWriter, r *http.Request) {
-	requestId := r.Context().Value(mc.RequestID).(string)
+	requestId := r.Context().Value(mc.ContextKey(mc.RequestID)).(string)
 	if r.Method != "GET" {
 		d.logger.Info(e.ErrMethodNotAllowed.Error(), zap.String(mc.RequestID, requestId))
 		propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: e.ErrMethodNotAllowed.Error()}, http.StatusMethodNotAllowed, mc.ApplicationJson)
@@ -69,7 +69,7 @@ func (d *DeliveryLayer) GetListOfTenders(w http.ResponseWriter, r *http.Request)
 }
 
 func (d *DeliveryLayer) CreateNewTender(w http.ResponseWriter, r *http.Request) {
-	requestId := r.Context().Value(mc.RequestID).(string)
+	requestId := r.Context().Value(mc.ContextKey(mc.RequestID)).(string)
 	if r.Method != "POST" {
 		d.logger.Info(e.ErrMethodNotAllowed.Error(), zap.String(mc.RequestID, requestId))
 		propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: e.ErrMethodNotAllowed.Error()}, http.StatusMethodNotAllowed, mc.ApplicationJson)
@@ -124,7 +124,7 @@ func (d *DeliveryLayer) CreateNewTender(w http.ResponseWriter, r *http.Request) 
 }
 
 func (d *DeliveryLayer) GetUserTenders(w http.ResponseWriter, r *http.Request) {
-	requestId := r.Context().Value(mc.RequestID).(string)
+	requestId := r.Context().Value(mc.ContextKey(mc.RequestID)).(string)
 	if r.Method != "GET" {
 		d.logger.Info(e.ErrMethodNotAllowed.Error(), zap.String(mc.RequestID, requestId))
 		propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: e.ErrMethodNotAllowed.Error()}, http.StatusMethodNotAllowed, mc.ApplicationJson)
@@ -177,7 +177,7 @@ func (d *DeliveryLayer) GetUserTenders(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *DeliveryLayer) GetTenderStatus(w http.ResponseWriter, r *http.Request) {
-	requestId := r.Context().Value(mc.RequestID).(string)
+	requestId := r.Context().Value(mc.ContextKey(mc.RequestID)).(string)
 	if r.Method != "GET" {
 		d.logger.Info(e.ErrMethodNotAllowed.Error(), zap.String(mc.RequestID, requestId))
 		propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: e.ErrMethodNotAllowed.Error()}, http.StatusMethodNotAllowed, mc.ApplicationJson)
@@ -229,7 +229,7 @@ func (d *DeliveryLayer) GetTenderStatus(w http.ResponseWriter, r *http.Request) 
 }
 
 func (d *DeliveryLayer) UpdateTenderStatus(w http.ResponseWriter, r *http.Request) {
-	requestId := r.Context().Value(mc.RequestID).(string)
+	requestId := r.Context().Value(mc.ContextKey(mc.RequestID)).(string)
 	if r.Method != "PUT" {
 		d.logger.Info(e.ErrMethodNotAllowed.Error(), zap.String(mc.RequestID, requestId))
 		propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: e.ErrMethodNotAllowed.Error()}, http.StatusMethodNotAllowed, mc.ApplicationJson)
@@ -285,7 +285,7 @@ func (d *DeliveryLayer) UpdateTenderStatus(w http.ResponseWriter, r *http.Reques
 }
 
 func (d *DeliveryLayer) UpdateTender(w http.ResponseWriter, r *http.Request) {
-	requestId := r.Context().Value(mc.RequestID).(string)
+	requestId := r.Context().Value(mc.ContextKey(mc.RequestID)).(string)
 	if r.Method != "PATCH" {
 		d.logger.Info(e.ErrMethodNotAllowed.Error(), zap.String(mc.RequestID, requestId))
 		propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: e.ErrMethodNotAllowed.Error()}, http.StatusMethodNotAllowed, mc.ApplicationJson)

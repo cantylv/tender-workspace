@@ -13,7 +13,7 @@ import (
 func Init(logger *zap.Logger) *pgx.Conn {
 	conn, err := pgx.Connect(context.Background(), viper.GetString("POSTGRES_CONN"))
 	if err != nil {
-		logger.Fatal(fmt.Sprintf("error while connecting to PSQL: %v", conn))
+		logger.Fatal(fmt.Sprintf("error while connecting to PSQL: %v", err))
 	}
 	const maxConnAttempts = 3
 

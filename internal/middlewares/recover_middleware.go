@@ -15,7 +15,7 @@ func Recover(h http.Handler, logger *zap.Logger) http.Handler {
 		defer func() {
 			if err := recover(); err != nil {
 				logger.Error(fmt.Sprintf("error while handling request: %v", err))
-				props := f.NewResponseProps(w, e.ResponseReason{Reason: "internal server error, please try again"}, http.StatusInternalServerError, mc.ApplicationJson)
+				props := f.NewResponseProps(w, e.ResponseReason{Reason: "internal server error, please try again later"}, http.StatusInternalServerError, mc.ApplicationJson)
 				f.Response(props)
 				return
 			}

@@ -7,16 +7,15 @@ COPY . /home/${MODULE_NAME}/
 
 WORKDIR /home/${MODULE_NAME}/
 
-RUN go build /home/${MODULE_NAME}/cmd/main/main.go
+RUN go build -o main cmd/main/main.go
 
 # Service
 FROM alpine:latest as production
-ARG MODULE_NAME=backend
+ARG BUILDER_MODULE_NAME=backend
 WORKDIR /root/
 
-COPY --from=builder /home/${MODULE_NAME}/config/config.yaml config/config.yaml
-COPY --from=builder /home/${MODULE_NAME}/main .
+COPY --from=builder /home/${BUILDER_MODULE_NAME}/config/config.yaml config/config.yaml
+COPY --from=builder /home/${BUILDER_MODULE_NAME}/main .
 
 RUN chown root:root main
-
 CMD ["./main"]
