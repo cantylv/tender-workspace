@@ -56,7 +56,7 @@ CREATE TABLE tender (
 
 CREATE TYPE creator_type AS ENUM (
     'User',
-    'Author'
+    'Responsible'
 );
 
 CREATE TYPE bid_status AS ENUM (
@@ -76,7 +76,7 @@ CREATE TABLE bids (
     tender_id INT REFERENCES tender(id) ON DELETE CASCADE NOT NULL,
     creator_id INT REFERENCES employee(id) ON DELETE CASCADE NOT NULL,
     author_type creator_type NOT NULL,
-    organization_id INT REFERENCES organization(id) ON DELETE CASCADE NOT NULL,  
+    organization_id INT REFERENCES organization(id) ON DELETE CASCADE NULL,  
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

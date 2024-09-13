@@ -3,18 +3,19 @@ package queries
 import (
 	"net/http"
 	"strconv"
+	mc "tender-workspace/internal/utils/myconstants"
 	e "tender-workspace/internal/utils/myerrors"
 )
 
-type ListUserBids struct {
-	Limit    int
-	Offset   int
-	Username string
+type OrganizationList struct {
+	Type   string
+	Limit  int
+	Offset int
 }
 
-func (q *ListUserBids) GetParameters(r *http.Request) error {
-	q.Limit = 5
+func (q *OrganizationList) GetParameters(r *http.Request) error {
 	queryParams := r.URL.Query()
+	q.Limit = 5
 	limitStr := queryParams.Get("limit")
 	if limitStr != "" {
 		limit, err := strconv.Atoi(limitStr)
@@ -23,20 +24,22 @@ func (q *ListUserBids) GetParameters(r *http.Request) error {
 		}
 		q.Limit = limit
 	}
+
 	q.Offset = 0 // explicit
 	offsetStr := queryParams.Get("offset")
 	if offsetStr != "" {
 		offset, err := strconv.Atoi(offsetStr)
 		if err != nil || offset < 0 {
-			return e.ErrQPOffset
+			return err
 		}
 		q.Offset = offset
 	}
 
-	username := queryParams.Get("username")
-	if username == "" {
-		return e.ErrBadPermission
+	q.Type = "" // explicit
+	orgType := queryParams.Get("type")
+	if _, ok := mc.AvaliableOrganizationType[orgType]; !ok && orgType != "" {
+		return e.ErrQPOrgType
 	}
-	q.Username = username
+	q.Type = orgType
 	return nil
 }

@@ -1,5 +1,7 @@
 package entity
 
+import "time"
+
 type Bid struct {
 	ID             int
 	Name           string
@@ -10,7 +12,7 @@ type Bid struct {
 	CreatorID      int
 	AuthorType     string
 	OrganizationID int
-	CreatedAt      string
+	CreatedAt      time.Time
 }
 
 type BidUpdateData struct {

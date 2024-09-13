@@ -2,17 +2,17 @@ package dto
 
 // INPUT DTO (REQUEST BODY)
 type BidInput struct {
-	Name            string `json:"name"`
-	Description     string `json:"description"`
-	Status          string `json:"status"`
-	TenderID        int    `json:"tenderId"`
-	OrganizationID  int    `json:"organizationId"`
-	CreatorUsername string `json:"username"`
+	Name            string `json:"name" valid:"name"`
+	Description     string `json:"description" valid:"description"`
+	Status          string `json:"status" valid:"-"`
+	TenderID        int    `json:"tenderId" valid:"-"`
+	OrganizationID  int    `json:"organizationId" valid:"-"`
+	CreatorUsername string `json:"creatorUsername" valid:"username"`
 }
 
 type BidUpdateDataInput struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name        string `json:"name" valid:"name"`
+	Description string `json:"description" valid:"description"`
 }
 
 // OUTPUT DTO (RESPONSE BODY)

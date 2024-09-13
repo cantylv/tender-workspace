@@ -103,7 +103,7 @@ func (d *DeliveryLayer) CreateNewTender(w http.ResponseWriter, r *http.Request) 
 	tender, err := d.ucTender.CreateTender(r.Context(), &tenderData)
 	if err != nil {
 		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
-		if errors.Is(err, e.ErrBadStatusCreate) || errors.Is(err, e.ErrQPServiceType) {
+		if errors.Is(err, e.ErrBadStatusCreate) || errors.Is(err, e.ErrQPServiceType) || errors.Is(err, e.ErrOrganizationExist) {
 			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusBadRequest, mc.ApplicationJson)
 			f.Response(propsError)
 			return
@@ -335,7 +335,6 @@ func (d *DeliveryLayer) UpdateTender(w http.ResponseWriter, r *http.Request) {
 		f.Response(propsError)
 		return
 	}
-
 	tender, err := d.ucTender.UpdateTender(r.Context(), &tenderData, queryParams)
 	if err != nil {
 		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
@@ -344,7 +343,7 @@ func (d *DeliveryLayer) UpdateTender(w http.ResponseWriter, r *http.Request) {
 			f.Response(propsError)
 			return
 		}
-		if errors.Is(err, e.ErrNoTenders) {
+		if errors.Is(err, e.ErrNoTenders) || errors.Is(err, e.ErrQPServiceType) {
 			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusBadRequest, mc.ApplicationJson)
 			f.Response(propsError)
 			return

@@ -26,7 +26,7 @@ func (q *TenderUpdate) GetParameters(r *http.Request) error {
 	}
 	q.TenderID = tenderId
 
-	username := r.Header.Get("username")
+	username := r.URL.Query().Get("username")
 	if username == "" {
 		return e.ErrBadPermission
 	}

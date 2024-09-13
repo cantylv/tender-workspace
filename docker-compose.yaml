@@ -48,6 +48,18 @@ services:
       - ${POSTGRES_PORT}:${POSTGRES_PORT}
     networks:
       - ecosystem
+  pgamdin:
+    image: dpage/pgadmin4:latest
+    restart: always
+    container_name: pgamdin
+    env_file: .env
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - 82:80
+    networks:
+      - ecosystem
   # mongodb:
   #   image: mongo:4.4
   #   restart: always

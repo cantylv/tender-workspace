@@ -29,7 +29,7 @@ func NewDeliveryLayer(ucBids bids.Usecase, logger *zap.Logger) *DeliveryLayer {
 }
 
 func (d *DeliveryLayer) CreateBid(w http.ResponseWriter, r *http.Request) {
-	requestId := r.Context().Value(mc.RequestID).(string)
+	requestId := r.Context().Value(mc.ContextKey(mc.RequestID)).(string)
 	if r.Method != "POST" {
 		d.logger.Info(e.ErrMethodNotAllowed.Error(), zap.String(mc.RequestID, requestId))
 		propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: e.ErrMethodNotAllowed.Error()}, http.StatusMethodNotAllowed, mc.ApplicationJson)
@@ -84,7 +84,7 @@ func (d *DeliveryLayer) CreateBid(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *DeliveryLayer) GetUserBids(w http.ResponseWriter, r *http.Request) {
-	requestId := r.Context().Value(mc.RequestID).(string)
+	requestId := r.Context().Value(mc.ContextKey(mc.RequestID)).(string)
 	if r.Method != "GET" {
 		d.logger.Info(e.ErrMethodNotAllowed.Error(), zap.String(mc.RequestID, requestId))
 		propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: e.ErrMethodNotAllowed.Error()}, http.StatusMethodNotAllowed, mc.ApplicationJson)
@@ -136,7 +136,7 @@ func (d *DeliveryLayer) GetUserBids(w http.ResponseWriter, r *http.Request) {
 	f.Response(responseData)
 }
 
-func (d *DeliveryLayer) GetTenderStatus(w http.ResponseWriter, r *http.Request) {
+func (d *DeliveryLayer) GetBidStatus(w http.ResponseWriter, r *http.Request) {
 	requestId := r.Context().Value(mc.RequestID).(string)
 	if r.Method != "GET" {
 		d.logger.Info(e.ErrMethodNotAllowed.Error(), zap.String(mc.RequestID, requestId))

@@ -6,9 +6,7 @@ import (
 	"errors"
 	"fmt"
 	ent "tender-workspace/internal/entity"
-	queries "tender-workspace/internal/entity/dto/queries/tenders"
 	tqp "tender-workspace/internal/entity/dto/queries/tenders"
-	f "tender-workspace/internal/utils/functions"
 	mc "tender-workspace/internal/utils/myconstants"
 	"time"
 
@@ -33,6 +31,7 @@ type UpdateTenderProps struct {
 // /tenders/{tenderId}/rollback/{version}:
 type Repo interface {
 	GetAll(ctx context.Context, params *tqp.ListTenders) ([]*ent.Tender, error)
+	Get(ctx context.Context, tenderId int) (*ent.Tender, error)
 	Create(ctx context.Context, initData *ent.Tender) (*ent.Tender, error)
 	GetUserTenders(ctx context.Context, params *UserTendersProps) ([]*ent.Tender, error)
 	ChangeStatus(ctx context.Context, tenderId int, status string) (*ent.Tender, error)
@@ -40,7 +39,6 @@ type Repo interface {
 	GetTenderStatus(ctx context.Context, tenderId int) (string, error)
 	GetTender(ctx context.Context, tenderId int) (*ent.Tender, error)
 	GetOrganizationTenders(ctx context.Context, organizationId int) ([]*ent.Tender, error)
-	UpdateTenderStatus(ctx context.Context, tenderId int, status string) (*ent.Tender, error)
 }
 
 type RepoLayer struct {
@@ -71,12 +69,32 @@ var (
     ) 
     VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $8
-    ) RETURNING *`
+    ) RETURNING id, name, description, type, status, version, organization_id, creator_id, created_at`
+	sqlRowUpdateTenderStatus = `UPDATE tender SET status=$1 WHERE id=$2 RETURNING id, name, description, type, status, version, organization_id, creator_id, created_at`
 )
+
+func (r *RepoLayer) Get(ctx context.Context, tenderId int) (*ent.Tender, error) {
+	row := r.Client.QueryRow(ctx, `SELECT id, name, description, type, status, version, organization_id, creator_id, created_at FROM tender WHERE id=$1`, tenderId)
+	var t ent.Tender
+	err := row.Scan(
+		&t.ID,
+		&t.Name,
+		&t.Description,
+		&t.Type,
+		&t.Status,
+		&t.Version,
+		&t.OrganizationID,
+		&t.CreatorID,
+		&t.CreatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
 
 func (r *RepoLayer) GetAll(ctx context.Context, params *tqp.ListTenders) ([]*ent.Tender, error) {
 	query, args := getGetAllSqlQuery(params)
-	fmt.Println(query, args)
 	rows, err := r.Client.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -98,7 +116,7 @@ func (r *RepoLayer) GetAll(ctx context.Context, params *tqp.ListTenders) ([]*ent
 			&t.CreatedAt,
 		)
 		if err != nil {
-			requestId := ctx.Value(mc.RequestID).(string)
+			requestId := ctx.Value(mc.ContextKey(mc.RequestID)).(string)
 			r.Logger.Error(fmt.Sprintf("error while scanning sql result: %v", err), zap.String(mc.RequestID, requestId))
 			continue
 		}
@@ -107,17 +125,21 @@ func (r *RepoLayer) GetAll(ctx context.Context, params *tqp.ListTenders) ([]*ent
 	return tenders, nil
 }
 
-func getGetAllSqlQuery(params *queries.ListTenders) (string, []any) {
-	sb := sqlbuilder.PostgreSQL.NewSelectBuilder().Select("*").From("tender")
+func getGetAllSqlQuery(params *tqp.ListTenders) (string, []any) {
+	sb := sqlbuilder.PostgreSQL.NewSelectBuilder().
+		Select("id, name, description, type, status, version, organization_id, creator_id, created_at").
+		From("tender")
 	if params.ServiceType != "" {
 		sb = sb.Where(sb.Equal("type", params.ServiceType))
 	}
+	sb = sb.Where(sb.NotEqual("status", "Created"))
+	sb = sb.Where(sb.NotEqual("status", "Closed"))
 	sb = sb.Offset(params.Offset).Limit(params.Limit).OrderBy("name").Asc()
 	return sb.Build()
 }
 
 func (r *RepoLayer) Create(ctx context.Context, initData *ent.Tender) (*ent.Tender, error) {
-	timeNow := f.FormatTime(time.Now())
+	timeNow := time.Now()
 	row := r.Client.QueryRow(ctx, sqlRowCreateTender,
 		initData.Name,
 		initData.Description,
@@ -147,7 +169,7 @@ func (r *RepoLayer) Create(ctx context.Context, initData *ent.Tender) (*ent.Tend
 }
 
 func (r *RepoLayer) ChangeStatus(ctx context.Context, tenderId int, status string) (*ent.Tender, error) {
-	row := r.Client.QueryRow(ctx, `UPDATE tender SET status=$1 WHERE id=$2 RETURN *`, status, tenderId)
+	row := r.Client.QueryRow(ctx, sqlRowUpdateTenderStatus, status, tenderId)
 	var t ent.Tender
 	err := row.Scan(
 		&t.ID,
@@ -167,10 +189,30 @@ func (r *RepoLayer) ChangeStatus(ctx context.Context, tenderId int, status strin
 }
 
 func (r *RepoLayer) Update(ctx context.Context, newTenderData *ent.UpdateTenderData, params *UpdateTenderProps) (*ent.Tender, error) {
-	query, args := getUpdateSqlQuery(newTenderData)
-	row := r.Client.QueryRow(ctx, query+"RETURN *", args...)
+	query, args := getUpdateSqlQuery(newTenderData, params)
+	fmt.Println()
+	fmt.Println()
+	fmt.Println(query)
+	tx, err := r.Client.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	// Откат транзакции в случае ошибки
+	defer func() {
+		if err != nil {
+			tx.Rollback(ctx)
+		}
+	}()
+	tag, err := tx.Exec(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, err
+	}
+	row := tx.QueryRow(ctx, `SELECT id, name, description, type, status, version, organization_id, creator_id, created_at FROM tender WHERE id=$1`, params.TenderID)
 	var t ent.Tender
-	err := row.Scan(
+	err = row.Scan(
 		&t.ID,
 		&t.Name,
 		&t.Description,
@@ -184,21 +226,29 @@ func (r *RepoLayer) Update(ctx context.Context, newTenderData *ent.UpdateTenderD
 	if err != nil {
 		return nil, err
 	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
 	return &t, nil
 }
 
-func getUpdateSqlQuery(newTenderData *ent.UpdateTenderData) (string, []any) {
-	sb := sqlbuilder.NewUpdateBuilder().Update("tender")
+func getUpdateSqlQuery(newTenderData *ent.UpdateTenderData, params *UpdateTenderProps) (string, []any) {
+	sb := sqlbuilder.PostgreSQL.NewUpdateBuilder().Update("tender")
+	// Собираем все изменения
+	var updates []string
+
 	if newTenderData.Type != "" {
-		sb = sb.Set("service_type", newTenderData.Type)
+		updates = append(updates, sb.Assign("type", newTenderData.Type))
 	}
 	if newTenderData.Name != "" {
-		sb = sb.Set("name", newTenderData.Name)
+		updates = append(updates, sb.Assign("name", newTenderData.Name))
 	}
 	if newTenderData.Description != "" {
-		sb = sb.Set("description", newTenderData.Description)
+		updates = append(updates, sb.Assign("description", newTenderData.Description))
 	}
-	sb = sb.Set("updated_at", f.FormatTime(time.Now()))
+	updates = append(updates, sb.Assign("updated_at", time.Now()))
+	sb.Set(updates...)
+	sb.Where(sb.Equal("id", params.TenderID))
 	return sb.Build()
 }
 
@@ -224,7 +274,7 @@ func (r *RepoLayer) GetUserTenders(ctx context.Context, params *UserTendersProps
 			&t.CreatedAt,
 		)
 		if err != nil {
-			requestId := ctx.Value(mc.RequestID).(string)
+			requestId := ctx.Value(mc.ContextKey(mc.RequestID)).(string)
 			r.Logger.Error(fmt.Sprintf("error while scanning sql result: %v", err), zap.String(mc.RequestID, requestId))
 			continue
 		}
@@ -234,7 +284,7 @@ func (r *RepoLayer) GetUserTenders(ctx context.Context, params *UserTendersProps
 }
 
 func getGetUserTendersSqlQuery(params *UserTendersProps) (string, []any) {
-	sb := sqlbuilder.NewSelectBuilder().Select("*").From("tender")
+	sb := sqlbuilder.NewSelectBuilder().Select("id, name, description, type, status, version, organization_id, creator_id, created_at").From("tender")
 	sb = sb.Where(sb.Equal("creator_id", params.UserID))
 	sb = sb.Offset(int(params.Offset)).Limit(int(params.Limit)).OrderBy("name").Asc()
 	return sb.Build()
@@ -250,28 +300,8 @@ func (r *RepoLayer) GetTenderStatus(ctx context.Context, tenderId int) (string, 
 	return status, nil
 }
 
-func (r *RepoLayer) UpdateTenderStatus(ctx context.Context, tenderId int, status string) (*ent.Tender, error) {
-	row := r.Client.QueryRow(ctx, `UPDATE tender SET status=$1 WHERE id=$2 SELECT *`, status, tenderId)
-	var t ent.Tender
-	err := row.Scan(
-		&t.ID,
-		&t.Name,
-		&t.Description,
-		&t.Type,
-		&t.Status,
-		&t.Version,
-		&t.OrganizationID,
-		&t.CreatorID,
-		&t.CreatedAt,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &t, nil
-}
-
 func (r *RepoLayer) GetOrganizationTenders(ctx context.Context, organizationId int) ([]*ent.Tender, error) {
-	rows, err := r.Client.Query(ctx, `SELECT * FROM tender WHERE organization_id=$1`, organizationId)
+	rows, err := r.Client.Query(ctx, `SELECT id, name, description, type, status, version, organization_id, creator_id, created_at FROM tender WHERE organization_id=$1`, organizationId)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -294,7 +324,7 @@ func (r *RepoLayer) GetOrganizationTenders(ctx context.Context, organizationId i
 			&t.CreatedAt,
 		)
 		if err != nil {
-			requestId := ctx.Value(mc.RequestID).(string)
+			requestId := ctx.Value(mc.ContextKey(mc.RequestID)).(string)
 			r.Logger.Error(fmt.Sprintf("error while scanning sql result: %v", err), zap.String(mc.RequestID, requestId))
 			continue
 		}
@@ -304,7 +334,7 @@ func (r *RepoLayer) GetOrganizationTenders(ctx context.Context, organizationId i
 }
 
 func (r *RepoLayer) GetTender(ctx context.Context, tenderId int) (*ent.Tender, error) {
-	row := r.Client.QueryRow(ctx, `SELECT * FROM tender WHERE id=$1`, tenderId)
+	row := r.Client.QueryRow(ctx, `SELECT id, name, description, type, status, version, organization_id, creator_id, created_at FROM tender WHERE id=$1`, tenderId)
 	var t ent.Tender
 	err := row.Scan(
 		&t.ID,

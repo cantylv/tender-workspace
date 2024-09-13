@@ -4,16 +4,16 @@ package dto
 type TenderInput struct {
 	Name            string `json:"name" valid:"name"`
 	Description     string `json:"description" valid:"description"`
-	Type            string `json:"serviceType" valid:"serviceType"`
-	Status          string `json:"status" valid:"status"`
-	OrganizationID  int    `json:"organizationId" valid:"organizationId"`
+	Type            string `json:"serviceType" valid:"-"`
+	Status          string `json:"status" valid:"-"`
+	OrganizationID  int    `json:"organizationId" valid:"-"`
 	CreatorUsername string `json:"creatorUsername" valid:"username"`
 }
 
 type TenderUpdateDataInput struct {
-	Name        string `json:"name" valid:"tenderName"`
-	Description string `json:"description" valid:"tenderDescription"`
-	ServiceType string `json:"serviceType" valid:"tenderStatus"`
+	Name        string `json:"name" valid:"name"`
+	Description string `json:"description" valid:"description"`
+	ServiceType string `json:"serviceType" valid:"-"`
 }
 
 // OUTPUT DTO (RESPONSE BODY)

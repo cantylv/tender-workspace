@@ -19,12 +19,6 @@ func newTender(user *ent.Employee, tenderInput *dto.TenderInput) *ent.Tender {
 	}
 }
 
-func newOrganizationResponsible(organizationId, userId int) *ent.OrganizationResponsible {
-	return &ent.OrganizationResponsible{
-		OrganizationID: organizationId,
-		UserID:         userId,
-	}
-}
 
 // func newUserTenderProps(params *tqp.ListUserTenders, user *ent.Employee) *t.UserTendersProps {
 // 	return &t.UserTendersProps{

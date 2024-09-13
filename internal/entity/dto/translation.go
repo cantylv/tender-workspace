@@ -1,6 +1,9 @@
 package dto
 
-import ent "tender-workspace/internal/entity"
+import (
+	ent "tender-workspace/internal/entity"
+	f "tender-workspace/internal/utils/functions"
+)
 
 func NewArrayTenderOutput(tenders []*ent.Tender) []*TenderOutput {
 	res := make([]*TenderOutput, 0, len(tenders))
@@ -19,7 +22,7 @@ func NewTenderOutput(tenders *ent.Tender) *TenderOutput {
 		Status:      tenders.Status,
 		Type:        tenders.Type,
 		Version:     tenders.Version,
-		CreatedAt:   tenders.CreatedAt,
+		CreatedAt:   f.FormatTime(tenders.CreatedAt),
 	}
 }
 
@@ -40,6 +43,6 @@ func NewBidOutput(bid *ent.Bid) *BidOutput {
 		AuthorType: bid.AuthorType,
 		AuthorID:   bid.CreatorID,
 		Version:    bid.Version,
-		CreatedAt:  bid.CreatedAt,
+		CreatedAt:  f.FormatTime(bid.CreatedAt),
 	}
 }

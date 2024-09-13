@@ -8,9 +8,11 @@ import (
 	ent "tender-workspace/internal/entity"
 	"tender-workspace/internal/entity/dto"
 	tqp "tender-workspace/internal/entity/dto/queries/tenders"
+	"tender-workspace/internal/repo/organization"
 	"tender-workspace/internal/repo/tender"
 	"tender-workspace/internal/repo/user"
 	mc "tender-workspace/internal/utils/myconstants"
+	"tender-workspace/internal/utils/myerrors"
 	e "tender-workspace/internal/utils/myerrors"
 )
 
@@ -38,14 +40,16 @@ type Usecase interface {
 var _ Usecase = (*UsecaseLayer)(nil)
 
 type UsecaseLayer struct {
-	repoTenders tender.Repo
-	repoUser    user.Repo
+	repoTenders      tender.Repo
+	repoUser         user.Repo
+	repoOrganization organization.Repo
 }
 
-func NewUsecaseLayer(repoTenders tender.Repo, repoUser user.Repo) *UsecaseLayer {
+func NewUsecaseLayer(repoTenders tender.Repo, repoUser user.Repo, repoOrganization organization.Repo) *UsecaseLayer {
 	return &UsecaseLayer{
-		repoTenders: repoTenders,
-		repoUser:    repoUser,
+		repoTenders:      repoTenders,
+		repoUser:         repoUser,
+		repoOrganization: repoOrganization,
 	}
 }
 
@@ -83,14 +87,20 @@ func (u *UsecaseLayer) CreateTender(ctx context.Context, initData *dto.TenderInp
 		}
 		return nil, err
 	}
-	// check if user is responsible for the organization
-	responsibilityProps := newOrganizationResponsible(initData.OrganizationID, userData.ID)
-	err = u.repoUser.IsResponsible(ctx, responsibilityProps)
+	// check org existing
+	_, err = u.repoOrganization.Get(ctx, initData.OrganizationID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, e.ErrResponsibilty
+			return nil, e.ErrOrganizationExist
 		}
 		return nil, err
+	}
+	isResponsible, err := u.repoOrganization.IsUserResponsible(ctx, initData.OrganizationID, userData.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !isResponsible {
+		return nil, e.ErrResponsibilty
 	}
 	tenderProps := newTender(userData, initData)
 	t, err := u.repoTenders.Create(ctx, tenderProps)
@@ -147,13 +157,12 @@ func (u *UsecaseLayer) GetTenderStatus(ctx context.Context, params *tqp.TenderSt
 		return "", err
 	}
 	// check if user is responsible for the organization
-	responsibilityProps := newOrganizationResponsible(tender.OrganizationID, userData.ID)
-	err = u.repoUser.IsResponsible(ctx, responsibilityProps)
+	isResponsible, err := u.repoOrganization.IsUserResponsible(ctx, userData.ID, tender.OrganizationID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", e.ErrResponsibilty
-		}
 		return "", err
+	}
+	if !isResponsible {
+		return "", e.ErrResponsibilty
 	}
 	return tender.Status, nil
 }
@@ -173,16 +182,15 @@ func (u *UsecaseLayer) UpdateTenderStatus(ctx context.Context, params *tqp.Updat
 		return nil, err
 	}
 	// check if user is responsible for the organization
-	responsibilityProps := newOrganizationResponsible(tender.OrganizationID, userData.ID)
-	err = u.repoUser.IsResponsible(ctx, responsibilityProps)
+	isResponsible, err := u.repoOrganization.IsUserResponsible(ctx, userData.ID, tender.OrganizationID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, e.ErrResponsibilty
-		}
 		return nil, err
 	}
+	if !isResponsible {
+		return nil, e.ErrResponsibilty
+	}
 	// update status
-	tender, err = u.repoTenders.UpdateTenderStatus(ctx, params.TenderID, params.Status)
+	tender, err = u.repoTenders.ChangeStatus(ctx, params.TenderID, params.Status)
 	if err != nil {
 		return nil, err
 	}
@@ -190,6 +198,12 @@ func (u *UsecaseLayer) UpdateTenderStatus(ctx context.Context, params *tqp.Updat
 }
 
 func (u *UsecaseLayer) UpdateTender(ctx context.Context, updateData *dto.TenderUpdateDataInput, params *tqp.TenderUpdate) (*ent.Tender, error) {
+	serviceType := strings.ToLower(updateData.ServiceType)
+	if _, ok := mc.AvaliableServiceType[serviceType]; !ok {
+		return nil, myerrors.ErrQPServiceType
+	}
+	runes := []rune(serviceType)
+	updateData.ServiceType = strings.ToUpper(string(runes[0])) + string(serviceType[1:len(runes)])
 	// check that tender exists
 	tender, err := u.repoTenders.GetTender(ctx, params.TenderID)
 	if err != nil {
@@ -204,13 +218,12 @@ func (u *UsecaseLayer) UpdateTender(ctx context.Context, updateData *dto.TenderU
 		return nil, err
 	}
 	// check if user is responsible for the organization
-	responsibilityProps := newOrganizationResponsible(tender.OrganizationID, userData.ID)
-	err = u.repoUser.IsResponsible(ctx, responsibilityProps)
+	isResponsible, err := u.repoOrganization.IsUserResponsible(ctx, userData.ID, tender.OrganizationID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, e.ErrResponsibilty
-		}
 		return nil, err
+	}
+	if !isResponsible {
+		return nil, e.ErrResponsibilty
 	}
 	// update status
 	tenderData := newUpdateTenderData(updateData)

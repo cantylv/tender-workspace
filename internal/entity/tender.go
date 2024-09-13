@@ -1,5 +1,7 @@
 package entity
 
+import "time"
+
 type Tender struct {
 	ID             int
 	Name           string
@@ -9,7 +11,7 @@ type Tender struct {
 	Version        int
 	OrganizationID int
 	CreatorID      int
-	CreatedAt      string
+	CreatedAt      time.Time
 }
 
 type UpdateTenderData struct {

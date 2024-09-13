@@ -31,30 +31,19 @@ func InitDtoValidator(logger *zap.Logger) {
 		return lenDescription > 0 && lenDescription <= 500
 	}
 
-	govalidator.TagMap["serviceType"] = func(serviceType string) bool {
-		lenTenderType := utf8.RuneCountInString(serviceType)
-		return lenTenderType > 0 && lenTenderType <= 12
-	}
-
-	govalidator.TagMap["status"] = func(status string) bool {
-		statusLen := utf8.RuneCountInString(status)
-		return statusLen > 0 && statusLen <= 9
-	}
-
-	govalidator.TagMap["organizationId"] = func(organizationId string) bool {
-		organizationIdLen := utf8.RuneCountInString(organizationId)
-		return organizationIdLen > 0
-	}
-
 	govalidator.TagMap["username"] = func(username string) bool {
 		usernameLen := utf8.RuneCountInString(username)
 		return usernameLen > 0 && usernameLen <= 50
 	}
 
-	govalidator.TagMap["tenderId"] = func(tenderId string) bool {
-		lenTenderId := utf8.RuneCountInString(tenderId)
-		return lenTenderId > 0
+	govalidator.TagMap["firstName"] = func(firstName string) bool {
+		firstNameLen := utf8.RuneCountInString(firstName)
+		return firstNameLen > 0 && firstNameLen <= 50
 	}
 
+	govalidator.TagMap["lastName"] = func(lastName string) bool {
+		lastNameLen := utf8.RuneCountInString(lastName)
+		return lastNameLen > 0 && lastNameLen <= 50
+	}
 	logger.Info("Custom tags created")
 }

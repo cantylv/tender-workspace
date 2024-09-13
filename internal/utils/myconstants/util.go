@@ -30,3 +30,9 @@ var AvaliableBidStatus = map[string]bool{
 	"approved":  true,
 	"rejected":  true,
 }
+
+var AvaliableOrganizationType = map[string]bool{
+	"IE":  true,
+	"LLC": true,
+	"JSC": true,
+}

@@ -28,7 +28,7 @@ func (q *TenderStatus) GetParameters(r *http.Request) error {
 	}
 	q.TenderID = tenderId
 
-	username := r.Header.Get("username")
+	username := r.URL.Query().Get("username")
 	if username == "" {
 		return e.ErrBadPermission
 	}
@@ -55,8 +55,10 @@ func (q *UpdateTenderStatus) GetParameters(r *http.Request) error {
 	}
 	q.TenderID = tenderId
 
+	queryParams := r.URL.Query()
+
 	q.Status = "" // explicit
-	status := r.Header.Get("status")
+	status := queryParams.Get("status")
 	if status == "" {
 		return e.ErrTenderStatus
 	}
@@ -67,7 +69,7 @@ func (q *UpdateTenderStatus) GetParameters(r *http.Request) error {
 	runes := []rune(statusLower)
 	q.Status = strings.ToUpper(string(runes[0])) + string(statusLower[1:len(runes)])
 
-	username := r.Header.Get("username")
+	username := queryParams.Get("username")
 	if username == "" {
 		return e.ErrBadPermission
 	}
