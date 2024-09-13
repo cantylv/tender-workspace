@@ -16,22 +16,22 @@ services:
   #   depends_on:
   #     - tender-platform
   #   tty: true
-  # tender-platform:
-  #   build:
-  #     context: ./
-  #     dockerfile: Dockerfile
-  #   restart: always
-  #   container_name: tender-platform
-  #   env_file: .env
-  #   ports: 
-  #     - ${SERVER_PORT}:${SERVER_PORT}
-  #   networks:
-  #     - ecosystem
-  #   depends_on: 
-  #     - postgres
-  #     # - mongodb
-  #     # - memcached
-  #     # - kafka 
+  tender-platform:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    restart: always
+    container_name: tender-platform
+    env_file: .env
+    ports: 
+      - ${SERVER_PORT}:${SERVER_PORT}
+    networks:
+      - ecosystem
+    depends_on: 
+      - postgres
+      # - mongodb
+      # - memcached
+      # - kafka 
   postgres:
     image: postgres:16.3
     restart: always
@@ -44,8 +44,8 @@ services:
     volumes:
       - ./services/postgres/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d:ro
       - ./services/postgres/data:/var/lib/postgresql/data
-    ports:
-      - ${POSTGRES_PORT}:${POSTGRES_PORT}
+    expose:
+      - ${POSTGRES_PORT}
     networks:
       - ecosystem
   pgamdin:
