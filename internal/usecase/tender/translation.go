@@ -9,7 +9,7 @@ import (
 
 func newTender(user *ent.Employee, tenderInput *dto.TenderInput) *ent.Tender {
 	return &ent.Tender{
-		Name:           tenderInput.Description,
+		Name:           tenderInput.Name,
 		Description:    tenderInput.Description,
 		Type:           tenderInput.Type,
 		Status:         tenderInput.Status,
@@ -26,13 +26,13 @@ func newOrganizationResponsible(organizationId, userId int) *ent.OrganizationRes
 	}
 }
 
-func newUserTenderProps(params *tqp.ListUserTenders, user *ent.Employee) *t.UserTendersProps {
-	return &t.UserTendersProps{
-		Limit:  params.Limit,
-		Offset: params.Offset,
-		UserID: user.ID,
-	}
-}
+// func newUserTenderProps(params *tqp.ListUserTenders, user *ent.Employee) *t.UserTendersProps {
+// 	return &t.UserTendersProps{
+// 		Limit:  params.Limit,
+// 		Offset: params.Offset,
+// 		UserID: user.ID,
+// 	}
+// }
 
 func newUpdateTenderData(updateData *dto.TenderUpdateDataInput) *ent.UpdateTenderData {
 	return &ent.UpdateTenderData{

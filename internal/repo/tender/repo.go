@@ -76,6 +76,7 @@ var (
 
 func (r *RepoLayer) GetAll(ctx context.Context, params *tqp.ListTenders) ([]*ent.Tender, error) {
 	query, args := getGetAllSqlQuery(params)
+	fmt.Println(query, args)
 	rows, err := r.Client.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -107,11 +108,11 @@ func (r *RepoLayer) GetAll(ctx context.Context, params *tqp.ListTenders) ([]*ent
 }
 
 func getGetAllSqlQuery(params *queries.ListTenders) (string, []any) {
-	sb := sqlbuilder.NewSelectBuilder().Select("*").From("tender")
+	sb := sqlbuilder.PostgreSQL.NewSelectBuilder().Select("*").From("tender")
 	if params.ServiceType != "" {
 		sb = sb.Where(sb.Equal("type", params.ServiceType))
 	}
-	sb = sb.Offset(int(params.Offset)).Limit(int(params.Limit)).OrderBy("name").Asc()
+	sb = sb.Offset(params.Offset).Limit(params.Limit).OrderBy("name").Asc()
 	return sb.Build()
 }
 

@@ -15,34 +15,29 @@ type ListTenders struct {
 }
 
 func (q *ListTenders) GetParameters(r *http.Request) error {
+	queryParams := r.URL.Query()
 	q.Limit = 5
-	limitStr := r.Header.Get("limit")
+	limitStr := queryParams.Get("limit")
 	if limitStr != "" {
 		limit, err := strconv.Atoi(limitStr)
-		if err != nil {
-			return err
-		}
-		if limit < 0 {
+		if err != nil || limit < 0 {
 			return e.ErrQPLimit
 		}
 		q.Limit = limit
 	}
 
 	q.Offset = 0 // explicit
-	offsetStr := r.Header.Get("offset")
+	offsetStr := queryParams.Get("offset")
 	if offsetStr != "" {
-		offset, err := strconv.Atoi(limitStr)
-		if err != nil {
-			return err
-		}
-		if offset < 0 {
+		offset, err := strconv.Atoi(offsetStr)
+		if err != nil || offset < 0 {
 			return e.ErrQPOffset
 		}
 		q.Offset = offset
 	}
 
 	q.ServiceType = "" // explicit
-	serviceType := r.Header.Get("service_type")
+	serviceType := queryParams.Get("service_type")
 	if serviceType == "" {
 		return nil
 	}

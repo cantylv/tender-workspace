@@ -4,8 +4,8 @@ import "errors"
 
 // HTTP
 var (
-	ErrQPLimit        = errors.New("parameter 'limit' must be positive")
-	ErrQPOffset       = errors.New("parameter 'offset' must be positive")
+	ErrQPLimit        = errors.New("parameter 'limit' must be positive number")
+	ErrQPOffset       = errors.New("parameter 'offset' must be positive number")
 	ErrQPChangeStatus = errors.New("parameter 'status' must be in list(Created, Published, Canceled)")
 	ErrQPDecision     = errors.New("parameter 'decision' must be in list(Approved, Rejected)")
 	ErrQPServiceType  = errors.New("parameter 'service_type' must be in list(Construction, Delivery, Manufacture)")
