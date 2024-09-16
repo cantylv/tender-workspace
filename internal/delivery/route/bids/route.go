@@ -26,9 +26,9 @@ func InitHandlers(r *mux.Router, psqlConn *pgx.Conn, logger *zap.Logger) {
 
 	r.HandleFunc("/bids/new", bDelivery.CreateBid)
 	r.HandleFunc("/bids/my", bDelivery.GetUserBids)
-	// r.HandleFunc("/bids/{tenderId}/list", tDelivery)
-	// r.HandleFunc("/bids/{bidId}/status", bDelivery.Ge).Methods("GET")
-	// r.HandleFunc("/bids/{bidId}/status", tDelivery.UpdateTenderStatus).Methods("PUT")
+	r.HandleFunc("/bids/{tenderId}/list", bDelivery.GetTenderListOfBids)
+	r.HandleFunc("/bids/{bidId}/status", bDelivery.GetBidStatus).Methods("GET")
+	r.HandleFunc("/bids/{bidId}/status", bDelivery.UpdateBidStatus).Methods("PUT")
 	// r.HandleFunc("/bids/{bidId}/edit", tDelivery.UpdateTender)
 	// r.HandleFunc("/bids/{bidId}/submit_decision")
 	// r.HandleFunc("/bids/{bidId}/rollback/{version}")

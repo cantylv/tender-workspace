@@ -3,17 +3,12 @@ package queries
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	mc "tender-workspace/internal/utils/myconstants"
 	e "tender-workspace/internal/utils/myerrors"
-)
 
-var avaliableStatus = map[string]bool{
-	"Created":   true,
-	"Published": true,
-	"Canceled":  true,
-	"Approved":  true,
-	"Rejected":  true,
-}
+	"github.com/gorilla/mux"
+)
 
 type BidStatus struct {
 	BidID    int
@@ -21,22 +16,17 @@ type BidStatus struct {
 }
 
 func (q *BidStatus) GetParameters(r *http.Request) error {
-
-	q.BidID = 0 // explicit
-	bidIdStr := r.Header.Get("bidId")
+	bidIdStr := mux.Vars(r)["bidId"]
 	if bidIdStr == "" {
-		return e.ErrExistTenderID
+		return e.ErrExistBidID
 	}
 	bidId, err := strconv.Atoi(bidIdStr)
-	if err != nil {
-		return e.ErrTenderID
-	}
-	if bidId < 1 {
+	if err != nil || bidId < 1 {
 		return e.ErrTenderID
 	}
 	q.BidID = bidId
 
-	username := r.Header.Get("username")
+	username := r.URL.Query().Get("username")
 	if username == "" {
 		return e.ErrBadPermission
 	}
@@ -51,31 +41,30 @@ type UpdateBidStatus struct {
 }
 
 func (q *UpdateBidStatus) GetParameters(r *http.Request) error {
-	q.BidID = 0 // explicit
-	bidIdStr := r.Header.Get("bidId")
+	bidIdStr := mux.Vars(r)["bidId"]
 	if bidIdStr == "" {
 		return e.ErrExistBidID
 	}
 	bidId, err := strconv.Atoi(bidIdStr)
-	if err != nil {
-		return e.ErrBidID
-	}
-	if bidId < 1 {
+	if err != nil || bidId < 1 {
 		return e.ErrBidID
 	}
 	q.BidID = bidId
 
-	q.Status = "" // explicit
-	status := r.Header.Get("status")
+	queryParams := r.URL.Query()
+	status := queryParams.Get("status")
 	if status == "" {
 		return e.ErrExistStatus
 	}
-	if _, ok := mc.AvaliableBidStatus[status]; !ok {
-		return e.ErrQPBidStatus
+	
+	statusLower := strings.ToLower(status)
+	if _, ok := mc.AvaliableBidStatus[statusLower]; !ok {
+		return e.ErrQPBidStatusUpdate
 	}
-	q.Status = status
+	runes := []rune(statusLower)
+	q.Status = strings.ToUpper(string(runes[0])) + string(runes[1:])
 
-	username := r.Header.Get("username")
+	username := queryParams.Get("username")
 	if username == "" {
 		return e.ErrBadPermission
 	}

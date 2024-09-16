@@ -58,49 +58,29 @@ var (
 	RETURNING id, name, description, type, created_at`
 )
 
-func (r *RepoLayer) Create(ctx context.Context, initData *ent.Organization) (*ent.Organization, error) {
-	timeNow := time.Now()
-	row := r.Client.QueryRow(ctx, sqlRowCreateOrganization, initData.Name, initData.Description, initData.Type, timeNow)
-	var o ent.Organization
-	err := row.Scan(&o.ID, &o.Name, &o.Description, &o.Type, &o.CreatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return &o, nil
-}
-
-func (r *RepoLayer) Get(ctx context.Context, organizationId int) (*ent.Organization, error) {
-	row := r.Client.QueryRow(ctx, `SELECT id, name, description, type, created_at FROM organization WHERE id=$1`, organizationId)
-	var o ent.Organization
-	err := row.Scan(&o.ID, &o.Name, &o.Description, &o.Type, &o.CreatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return &o, nil
-}
-
 func (r *RepoLayer) GetAll(ctx context.Context, params *oqp.OrganizationList) ([]*ent.Organization, error) {
-	query, args := getGetAllSqlQuery(params)
+	query, args := getAllSqlQuery(params)
 	rows, err := r.Client.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var orgs []*ent.Organization
+	var orgsDB []*organizationDB
 	for rows.Next() {
-		var o ent.Organization
+		var o organizationDB
 		err := rows.Scan(&o.ID, &o.Name, &o.Description, &o.Type, &o.CreatedAt)
 		if err != nil {
 			requestId := ctx.Value(mc.ContextKey(mc.RequestID)).(string)
 			r.Logger.Error(fmt.Sprintf("error while scanning sql result: %v", err), zap.String(mc.RequestID, requestId))
 			continue
 		}
-		orgs = append(orgs, &o)
+		orgsDB = append(orgsDB, &o)
 	}
+	orgs := getArrayOrganizationFromDB(orgsDB)
 	return orgs, nil
 }
 
-func getGetAllSqlQuery(params *oqp.OrganizationList) (string, []any) {
+func getAllSqlQuery(params *oqp.OrganizationList) (string, []any) {
 	sb := sqlbuilder.PostgreSQL.NewSelectBuilder().Select("id, name, description, type, created_at").From("organization")
 	if params.Type != "" {
 		sb = sb.Where(sb.Equal("type", params.Type))
@@ -109,20 +89,39 @@ func getGetAllSqlQuery(params *oqp.OrganizationList) (string, []any) {
 	return sb.Build()
 }
 
+func (r *RepoLayer) Create(ctx context.Context, initData *ent.Organization) (*ent.Organization, error) {
+	row := r.Client.QueryRow(ctx, sqlRowCreateOrganization, initData.Name, initData.Description, initData.Type, time.Now())
+	var oDB organizationDB
+	err := row.Scan(&oDB.ID, &oDB.Name, &oDB.Description, &oDB.Type, &oDB.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return getOrganizationFromDB(&oDB), nil
+}
+
 func (r *RepoLayer) Update(ctx context.Context, updateData *ent.Organization) (*ent.Organization, error) {
-	timeNow := time.Now()
 	row := r.Client.QueryRow(ctx, sqlRowUpdateOrganization,
 		updateData.Name,
 		updateData.Description,
 		updateData.Type,
-		timeNow,
+		time.Now(),
 		updateData.ID)
-	var o ent.Organization
-	err := row.Scan(&o.ID, &o.Name, &o.Description, &o.Type, &o.CreatedAt)
+	var oDB organizationDB
+	err := row.Scan(&oDB.ID, &oDB.Name, &oDB.Description, &oDB.Type, &oDB.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
-	return &o, nil
+	return getOrganizationFromDB(&oDB), nil
+}
+
+func (r *RepoLayer) Get(ctx context.Context, organizationId int) (*ent.Organization, error) {
+	row := r.Client.QueryRow(ctx, `SELECT id, name, description, type, created_at FROM organization WHERE id=$1`, organizationId)
+	var oDB organizationDB
+	err := row.Scan(&oDB.ID, &oDB.Name, &oDB.Description, &oDB.Type, &oDB.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return getOrganizationFromDB(&oDB), nil
 }
 
 func (r *RepoLayer) IsUserResponsible(ctx context.Context, userID, organizationID int) (bool, error) {

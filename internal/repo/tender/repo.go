@@ -2,8 +2,6 @@ package tender
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	ent "tender-workspace/internal/entity"
 	tqp "tender-workspace/internal/entity/dto/queries/tenders"
@@ -31,11 +29,10 @@ type UpdateTenderProps struct {
 // /tenders/{tenderId}/rollback/{version}:
 type Repo interface {
 	GetAll(ctx context.Context, params *tqp.ListTenders) ([]*ent.Tender, error)
-	Get(ctx context.Context, tenderId int) (*ent.Tender, error)
 	Create(ctx context.Context, initData *ent.Tender) (*ent.Tender, error)
 	GetUserTenders(ctx context.Context, params *UserTendersProps) ([]*ent.Tender, error)
-	ChangeStatus(ctx context.Context, tenderId int, status string) (*ent.Tender, error)
-	Update(ctx context.Context, newTenderData *ent.UpdateTenderData, params *UpdateTenderProps) (*ent.Tender, error)
+	ChangeStatus(ctx context.Context, tenderId, tenderNewVersion int, status string) (*ent.Tender, error)
+	Update(ctx context.Context, newTenderData *ent.UpdateTenderData, params *UpdateTenderProps, tenderNewVersion int) (*ent.Tender, error)
 	GetTenderStatus(ctx context.Context, tenderId int) (string, error)
 	GetTender(ctx context.Context, tenderId int) (*ent.Tender, error)
 	GetOrganizationTenders(ctx context.Context, organizationId int) ([]*ent.Tender, error)
@@ -70,31 +67,11 @@ var (
     VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $8
     ) RETURNING id, name, description, type, status, version, organization_id, creator_id, created_at`
-	sqlRowUpdateTenderStatus = `UPDATE tender SET status=$1 WHERE id=$2 RETURNING id, name, description, type, status, version, organization_id, creator_id, created_at`
+	sqlRowUpdateTenderStatus = `UPDATE tender SET status=$1, version=$2 WHERE id=$3 RETURNING id, name, description, type, status, version, organization_id, creator_id, created_at`
 )
 
-func (r *RepoLayer) Get(ctx context.Context, tenderId int) (*ent.Tender, error) {
-	row := r.Client.QueryRow(ctx, `SELECT id, name, description, type, status, version, organization_id, creator_id, created_at FROM tender WHERE id=$1`, tenderId)
-	var t ent.Tender
-	err := row.Scan(
-		&t.ID,
-		&t.Name,
-		&t.Description,
-		&t.Type,
-		&t.Status,
-		&t.Version,
-		&t.OrganizationID,
-		&t.CreatorID,
-		&t.CreatedAt,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &t, nil
-}
-
 func (r *RepoLayer) GetAll(ctx context.Context, params *tqp.ListTenders) ([]*ent.Tender, error) {
-	query, args := getGetAllSqlQuery(params)
+	query, args := getAllSqlQuery(params)
 	rows, err := r.Client.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -125,7 +102,7 @@ func (r *RepoLayer) GetAll(ctx context.Context, params *tqp.ListTenders) ([]*ent
 	return tenders, nil
 }
 
-func getGetAllSqlQuery(params *tqp.ListTenders) (string, []any) {
+func getAllSqlQuery(params *tqp.ListTenders) (string, []any) {
 	sb := sqlbuilder.PostgreSQL.NewSelectBuilder().
 		Select("id, name, description, type, status, version, organization_id, creator_id, created_at").
 		From("tender")
@@ -168,8 +145,8 @@ func (r *RepoLayer) Create(ctx context.Context, initData *ent.Tender) (*ent.Tend
 	return &t, nil
 }
 
-func (r *RepoLayer) ChangeStatus(ctx context.Context, tenderId int, status string) (*ent.Tender, error) {
-	row := r.Client.QueryRow(ctx, sqlRowUpdateTenderStatus, status, tenderId)
+func (r *RepoLayer) ChangeStatus(ctx context.Context, tenderId, tenderNewVersion int, status string) (*ent.Tender, error) {
+	row := r.Client.QueryRow(ctx, sqlRowUpdateTenderStatus, status, tenderNewVersion, tenderId)
 	var t ent.Tender
 	err := row.Scan(
 		&t.ID,
@@ -188,11 +165,8 @@ func (r *RepoLayer) ChangeStatus(ctx context.Context, tenderId int, status strin
 	return &t, nil
 }
 
-func (r *RepoLayer) Update(ctx context.Context, newTenderData *ent.UpdateTenderData, params *UpdateTenderProps) (*ent.Tender, error) {
-	query, args := getUpdateSqlQuery(newTenderData, params)
-	fmt.Println()
-	fmt.Println()
-	fmt.Println(query)
+func (r *RepoLayer) Update(ctx context.Context, newTenderData *ent.UpdateTenderData, params *UpdateTenderProps, tenderNewVersion int) (*ent.Tender, error) {
+	query, args := updateSqlQuery(newTenderData, params, tenderNewVersion)
 	tx, err := r.Client.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
@@ -232,7 +206,7 @@ func (r *RepoLayer) Update(ctx context.Context, newTenderData *ent.UpdateTenderD
 	return &t, nil
 }
 
-func getUpdateSqlQuery(newTenderData *ent.UpdateTenderData, params *UpdateTenderProps) (string, []any) {
+func updateSqlQuery(newTenderData *ent.UpdateTenderData, params *UpdateTenderProps, newTenderVersion int) (string, []any) {
 	sb := sqlbuilder.PostgreSQL.NewUpdateBuilder().Update("tender")
 	// Собираем все изменения
 	var updates []string
@@ -246,7 +220,7 @@ func getUpdateSqlQuery(newTenderData *ent.UpdateTenderData, params *UpdateTender
 	if newTenderData.Description != "" {
 		updates = append(updates, sb.Assign("description", newTenderData.Description))
 	}
-	updates = append(updates, sb.Assign("updated_at", time.Now()))
+	updates = append(updates, sb.Assign("updated_at", time.Now()), sb.Assign("version", newTenderVersion))
 	sb.Set(updates...)
 	sb.Where(sb.Equal("id", params.TenderID))
 	return sb.Build()
@@ -303,9 +277,6 @@ func (r *RepoLayer) GetTenderStatus(ctx context.Context, tenderId int) (string, 
 func (r *RepoLayer) GetOrganizationTenders(ctx context.Context, organizationId int) ([]*ent.Tender, error) {
 	rows, err := r.Client.Query(ctx, `SELECT id, name, description, type, status, version, organization_id, creator_id, created_at FROM tender WHERE organization_id=$1`, organizationId)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		}
 		return nil, err
 	}
 
@@ -348,7 +319,7 @@ func (r *RepoLayer) GetTender(ctx context.Context, tenderId int) (*ent.Tender, e
 		&t.CreatedAt,
 	)
 	if err != nil {
-		return nil, nil
+		return nil, err
 	}
 	return &t, nil
 }

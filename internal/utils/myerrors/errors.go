@@ -4,15 +4,18 @@ import "errors"
 
 // HTTP
 var (
-	ErrQPLimit        = errors.New("parameter 'limit' must be positive number")
-	ErrQPOffset       = errors.New("parameter 'offset' must be positive number")
-	ErrQPChangeStatus = errors.New("parameter 'status' must be in list(Created, Published, Canceled)")
-	ErrQPDecision     = errors.New("parameter 'decision' must be in list(Approved, Rejected)")
-	ErrQPServiceType  = errors.New("parameter 'service_type' must be in list(Construction, Delivery, Manufacture)")
-	ErrQPBidStatus    = errors.New("parameter 'status' must be in list(Construction, Delivery, Manufacture)")
-	ErrQPOrgType      = errors.New("parameter 'type' must be in list(IE, LLC, JSC)")
+	ErrQPLimit           = errors.New("parameter 'limit' must be positive number")
+	ErrQPOffset          = errors.New("parameter 'offset' must be positive number")
+	ErrQPChangeStatus    = errors.New("parameter 'status' must be in list(Created, Published, Canceled)")
+	ErrQPDecision        = errors.New("parameter 'decision' must be in list(Approved, Rejected)")
+	ErrQPServiceType     = errors.New("parameter 'service_type' must be in list(Construction, Delivery, Manufacture)")
+	ErrQPBidStatus       = errors.New("parameter 'status' must be in list(Created, Published, Canceled)")
+	ErrQPBidStatusUpdate = errors.New("parameter 'status' must be in list(Created, Published, Canceled, Approved, Rejected)")
+	ErrQPOrgType         = errors.New("parameter 'type' must be in list(IE, LLC, JSC)")
 
 	ErrBadPermission          = errors.New("you doesn't have sufficient rights to obtain the resource")
+	ErrBidYourself            = errors.New("you can't offer your own company a service")
+	ErrSetDeprecatedStatus    = errors.New("you can't set this status to bid")
 	ErrUserAndOrg             = errors.New("you aren't responsible for this organizaton")
 	ErrMethodNotAllowed       = errors.New("method not allowed")
 	ErrInternal               = errors.New("internal server error, please try again later")
@@ -24,6 +27,8 @@ var (
 	ErrTenderExist            = errors.New("tender doesn't exist")
 	ErrUserIsNotResponsible   = errors.New("you aren't responsible for any organizaton")
 	ErrUserAlreadyResponsible = errors.New("you are already responsible for this organizaton")
+	ErrUserAlreadyHasBid      = errors.New("you are already has bid to this tender")
+	ErrOrgAlreadyHasBid       = errors.New("your organization already has bid to this tender")
 
 	ErrBidID           = errors.New("you have specified incorrect parameter 'bidId'")
 	ErrTenderID        = errors.New("you have specified incorrect parameter 'tenderId'")

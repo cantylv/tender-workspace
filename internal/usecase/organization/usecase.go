@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	ent "tender-workspace/internal/entity"
 	"tender-workspace/internal/entity/dto"
 	oqp "tender-workspace/internal/entity/dto/queries/organizations"
@@ -40,9 +41,11 @@ func (u *UsecaseLayer) GetAll(ctx context.Context, params *oqp.OrganizationList)
 
 func (u *UsecaseLayer) Create(ctx context.Context, initData *dto.OrganizationInput) (*ent.Organization, error) {
 	// check type existing
-	if _, ok := mc.AvaliableOrganizationType[initData.Type]; !ok {
+	typeUpper := strings.ToUpper(initData.Type)
+	if _, ok := mc.AvaliableOrganizationType[typeUpper]; !ok {
 		return nil, e.ErrQPOrgType
 	}
+	initData.Type = typeUpper
 	dataCreate := newOrganization(initData)
 	org, err := u.repoOrg.Create(ctx, dataCreate)
 	if err != nil {
@@ -53,9 +56,11 @@ func (u *UsecaseLayer) Create(ctx context.Context, initData *dto.OrganizationInp
 
 func (u *UsecaseLayer) Update(ctx context.Context, updateData *dto.OrganizationInput, organizationId int) (*ent.Organization, error) {
 	// check type existing
+	typeUpper := strings.ToUpper(updateData.Type)
 	if _, ok := mc.AvaliableOrganizationType[updateData.Type]; !ok {
 		return nil, e.ErrQPOrgType
 	}
+	updateData.Type = typeUpper
 	dataCreate := newOrganization(updateData)
 	dataCreate.ID = organizationId
 	org, err := u.repoOrg.Update(ctx, dataCreate)
@@ -66,6 +71,7 @@ func (u *UsecaseLayer) Update(ctx context.Context, updateData *dto.OrganizationI
 }
 
 func (u *UsecaseLayer) MakeResponsible(ctx context.Context, username string, organizationID int) error {
+	// check user existing
 	user, err := u.repoUser.GetData(ctx, username)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -73,6 +79,7 @@ func (u *UsecaseLayer) MakeResponsible(ctx context.Context, username string, org
 		}
 		return err
 	}
+	// check org existing
 	_, err = u.repoOrg.Get(ctx, organizationID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -80,6 +87,7 @@ func (u *UsecaseLayer) MakeResponsible(ctx context.Context, username string, org
 		}
 		return err
 	}
+	// check if user responsible
 	isResponsible, err := u.repoOrg.IsUserResponsible(ctx, user.ID, organizationID)
 	if err != nil {
 		return err

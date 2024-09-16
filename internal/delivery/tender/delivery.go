@@ -160,15 +160,13 @@ func (d *DeliveryLayer) GetUserTenders(w http.ResponseWriter, r *http.Request) {
 			f.Response(propsError)
 			return
 		}
-		if errors.Is(err, e.ErrBigInterval) {
-			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusBadRequest, mc.ApplicationJson)
-			f.Response(propsError)
-			return
-		}
 		propsError := f.NewResponseProps(w, ent.ResponseError{Error: e.ErrInternal.Error()},
 			http.StatusInternalServerError, mc.ApplicationJson)
 		f.Response(propsError)
 		return
+	}
+	if tenders == nil {
+		tenders = make([]*ent.Tender, 0)
 	}
 
 	tenderOutput := dto.NewArrayTenderOutput(tenders)
@@ -208,13 +206,13 @@ func (d *DeliveryLayer) GetTenderStatus(w http.ResponseWriter, r *http.Request) 
 	status, err := d.ucTender.GetTenderStatus(r.Context(), queryParams)
 	if err != nil {
 		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
-		if errors.Is(err, e.ErrUserExist) || errors.Is(err, e.ErrResponsibilty) {
-			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusUnauthorized, mc.ApplicationJson)
+		if errors.Is(err, e.ErrNoTenders) {
+			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusBadRequest, mc.ApplicationJson)
 			f.Response(propsError)
 			return
 		}
-		if errors.Is(err, e.ErrNoTenders) {
-			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusBadRequest, mc.ApplicationJson)
+		if errors.Is(err, e.ErrUserExist) || errors.Is(err, e.ErrResponsibilty) {
+			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusUnauthorized, mc.ApplicationJson)
 			f.Response(propsError)
 			return
 		}

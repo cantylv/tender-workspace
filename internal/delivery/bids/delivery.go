@@ -63,12 +63,18 @@ func (d *DeliveryLayer) CreateBid(w http.ResponseWriter, r *http.Request) {
 	bid, err := d.ucBids.CreateBid(r.Context(), &bidData)
 	if err != nil {
 		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
-		if errors.Is(err, e.ErrBadStatusCreate) || errors.Is(err, e.ErrQPServiceType) {
+		if errors.Is(err, e.ErrBadStatusCreate) ||
+			errors.Is(err, e.ErrTenderExist) ||
+			errors.Is(err, e.ErrOrganizationExist) ||
+			errors.Is(err, e.ErrUserAndOrg) ||
+			errors.Is(err, e.ErrUserAlreadyHasBid) ||
+			errors.Is(err, e.ErrOrgAlreadyHasBid) ||
+			errors.Is(err, e.ErrBidYourself) {
 			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusBadRequest, mc.ApplicationJson)
 			f.Response(propsError)
 			return
 		}
-		if errors.Is(err, e.ErrResponsibilty) || errors.Is(err, e.ErrUserExist) {
+		if errors.Is(err, e.ErrUserExist) {
 			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusUnauthorized, mc.ApplicationJson)
 			f.Response(propsError)
 			return
@@ -115,13 +121,45 @@ func (d *DeliveryLayer) GetUserBids(w http.ResponseWriter, r *http.Request) {
 	bids, err := d.ucBids.GetUserBids(r.Context(), queryParams)
 	if err != nil {
 		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
-		if errors.Is(err, e.ErrUserExist) || errors.Is(err, e.ErrUserIsNotResponsible) {
+		if errors.Is(err, e.ErrUserExist) {
 			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusUnauthorized, mc.ApplicationJson)
 			f.Response(propsError)
 			return
 		}
-		if errors.Is(err, e.ErrBigInterval) {
+		propsError := f.NewResponseProps(w, ent.ResponseError{Error: e.ErrInternal.Error()},
+			http.StatusInternalServerError, mc.ApplicationJson)
+		f.Response(propsError)
+		return
+	}
+	if len(bids) == 0 {
+		bids = make([]*ent.Bid, 0)
+	}
+
+	bidsOutput := dto.NewArrayBidOutput(bids)
+	responseData := f.NewResponseProps(w, bidsOutput, http.StatusOK, mc.ApplicationJson)
+	f.Response(responseData)
+}
+
+func (d *DeliveryLayer) GetTenderListOfBids(w http.ResponseWriter, r *http.Request) {
+	requestId := r.Context().Value(mc.ContextKey(mc.RequestID)).(string)
+	if r.Method != "GET" {
+		d.logger.Info(e.ErrMethodNotAllowed.Error(), zap.String(mc.RequestID, requestId))
+		propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: e.ErrMethodNotAllowed.Error()}, http.StatusMethodNotAllowed, mc.ApplicationJson)
+		f.Response(propsError)
+		return
+	}
+
+	queryParams := new(bqp.TenderBidList)
+	err := queryParams.GetParameters(r)
+	if err != nil {
+		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
+		if errors.Is(err, e.ErrQPLimit) || errors.Is(err, e.ErrQPOffset) || errors.Is(err, e.ErrTenderID) {
 			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusBadRequest, mc.ApplicationJson)
+			f.Response(propsError)
+			return
+		}
+		if errors.Is(err, e.ErrBadPermission) {
+			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusUnauthorized, mc.ApplicationJson)
 			f.Response(propsError)
 			return
 		}
@@ -131,19 +169,35 @@ func (d *DeliveryLayer) GetUserBids(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	bids, err := d.ucBids.GetTenderBids(r.Context(), queryParams)
+	if err != nil {
+		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
+		if errors.Is(err, e.ErrTenderExist) {
+			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusBadRequest, mc.ApplicationJson)
+			f.Response(propsError)
+			return
+		}
+		if errors.Is(err, e.ErrUserExist) || errors.Is(err, e.ErrResponsibilty) {
+			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusUnauthorized, mc.ApplicationJson)
+			f.Response(propsError)
+			return
+		}
+		propsError := f.NewResponseProps(w, ent.ResponseError{Error: e.ErrInternal.Error()},
+			http.StatusInternalServerError, mc.ApplicationJson)
+		f.Response(propsError)
+		return
+	}
+	if len(bids) == 0 {
+		bids = make([]*ent.Bid, 0)
+	}
+
 	bidsOutput := dto.NewArrayBidOutput(bids)
 	responseData := f.NewResponseProps(w, bidsOutput, http.StatusOK, mc.ApplicationJson)
 	f.Response(responseData)
 }
 
 func (d *DeliveryLayer) GetBidStatus(w http.ResponseWriter, r *http.Request) {
-	requestId := r.Context().Value(mc.RequestID).(string)
-	if r.Method != "GET" {
-		d.logger.Info(e.ErrMethodNotAllowed.Error(), zap.String(mc.RequestID, requestId))
-		propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: e.ErrMethodNotAllowed.Error()}, http.StatusMethodNotAllowed, mc.ApplicationJson)
-		f.Response(propsError)
-		return
-	}
+	requestId := r.Context().Value(mc.ContextKey(mc.RequestID)).(string)
 
 	queryParams := new(bqp.BidStatus)
 	err := queryParams.GetParameters(r)
@@ -168,12 +222,12 @@ func (d *DeliveryLayer) GetBidStatus(w http.ResponseWriter, r *http.Request) {
 	status, err := d.ucBids.GetBidStatus(r.Context(), queryParams)
 	if err != nil {
 		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
-		if errors.Is(err, e.ErrUserExist) || errors.Is(err, e.ErrResponsibilty) {
+		if errors.Is(err, e.ErrUserExist) {
 			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusUnauthorized, mc.ApplicationJson)
 			f.Response(propsError)
 			return
 		}
-		if errors.Is(err, e.ErrNoBids) {
+		if errors.Is(err, e.ErrNoBids) || errors.Is(err, e.ErrBadPermission) {
 			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusBadRequest, mc.ApplicationJson)
 			f.Response(propsError)
 			return
@@ -189,13 +243,7 @@ func (d *DeliveryLayer) GetBidStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *DeliveryLayer) UpdateBidStatus(w http.ResponseWriter, r *http.Request) {
-	requestId := r.Context().Value(mc.RequestID).(string)
-	if r.Method != "PUT" {
-		d.logger.Info(e.ErrMethodNotAllowed.Error(), zap.String(mc.RequestID, requestId))
-		propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: e.ErrMethodNotAllowed.Error()}, http.StatusMethodNotAllowed, mc.ApplicationJson)
-		f.Response(propsError)
-		return
-	}
+	requestId := r.Context().Value(mc.ContextKey(mc.RequestID)).(string)
 
 	queryParams := new(bqp.UpdateBidStatus)
 	err := queryParams.GetParameters(r)
@@ -204,7 +252,7 @@ func (d *DeliveryLayer) UpdateBidStatus(w http.ResponseWriter, r *http.Request) 
 		if errors.Is(err, e.ErrExistBidID) ||
 			errors.Is(err, e.ErrBidID) ||
 			errors.Is(err, e.ErrExistStatus) ||
-			errors.Is(err, e.ErrQPBidStatus) {
+			errors.Is(err, e.ErrQPBidStatusUpdate) {
 			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusBadRequest, mc.ApplicationJson)
 			f.Response(propsError)
 			return
@@ -228,7 +276,7 @@ func (d *DeliveryLayer) UpdateBidStatus(w http.ResponseWriter, r *http.Request) 
 			f.Response(propsError)
 			return
 		}
-		if errors.Is(err, e.ErrNoBids) {
+		if errors.Is(err, e.ErrNoBids) || errors.Is(err, e.ErrSetDeprecatedStatus) || errors.Is(err, e.ErrBadPermission) {
 			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusBadRequest, mc.ApplicationJson)
 			f.Response(propsError)
 			return

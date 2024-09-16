@@ -3,6 +3,7 @@ package queries
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	mc "tender-workspace/internal/utils/myconstants"
 	e "tender-workspace/internal/utils/myerrors"
 )
@@ -30,16 +31,19 @@ func (q *OrganizationList) GetParameters(r *http.Request) error {
 	if offsetStr != "" {
 		offset, err := strconv.Atoi(offsetStr)
 		if err != nil || offset < 0 {
-			return err
+			return e.ErrQPOffset
 		}
 		q.Offset = offset
 	}
 
 	q.Type = "" // explicit
 	orgType := queryParams.Get("type")
-	if _, ok := mc.AvaliableOrganizationType[orgType]; !ok && orgType != "" {
-		return e.ErrQPOrgType
+	if orgType != "" {
+		typeUpper := strings.ToUpper(orgType)
+		if _, ok := mc.AvaliableOrganizationType[typeUpper]; !ok {
+			return e.ErrQPOrgType
+		}
+		q.Type = typeUpper
 	}
-	q.Type = orgType
 	return nil
 }

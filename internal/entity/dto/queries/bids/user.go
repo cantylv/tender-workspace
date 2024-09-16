@@ -13,8 +13,8 @@ type ListUserBids struct {
 }
 
 func (q *ListUserBids) GetParameters(r *http.Request) error {
-	q.Limit = 5
 	queryParams := r.URL.Query()
+	q.Limit = 5
 	limitStr := queryParams.Get("limit")
 	if limitStr != "" {
 		limit, err := strconv.Atoi(limitStr)

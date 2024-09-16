@@ -1,6 +1,7 @@
 package functions
 
 import (
+	"strconv"
 	"unicode/utf8"
 
 	"github.com/asaskevich/govalidator"
@@ -26,6 +27,14 @@ func InitDtoValidator(logger *zap.Logger) {
 		return lenName > 0 && lenName <= 100
 	}
 
+	govalidator.TagMap["id"] = func(idStr string) bool {
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			return false
+		}
+		return id >= 0
+	}
+
 	govalidator.TagMap["description"] = func(description string) bool {
 		lenDescription := utf8.RuneCountInString(description)
 		return lenDescription > 0 && lenDescription <= 500
@@ -38,12 +47,12 @@ func InitDtoValidator(logger *zap.Logger) {
 
 	govalidator.TagMap["firstName"] = func(firstName string) bool {
 		firstNameLen := utf8.RuneCountInString(firstName)
-		return firstNameLen > 0 && firstNameLen <= 50
+		return firstNameLen >= 0 && firstNameLen <= 50
 	}
 
 	govalidator.TagMap["lastName"] = func(lastName string) bool {
 		lastNameLen := utf8.RuneCountInString(lastName)
-		return lastNameLen > 0 && lastNameLen <= 50
+		return lastNameLen >= 0 && lastNameLen <= 50
 	}
 	logger.Info("Custom tags created")
 }

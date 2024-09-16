@@ -17,7 +17,6 @@ type TenderStatus struct {
 
 func (q *TenderStatus) GetParameters(r *http.Request) error {
 	vars := mux.Vars(r)
-	q.TenderID = 0 // explicit
 	tenderIdStr := vars["tenderId"]
 	if tenderIdStr == "" {
 		return e.ErrExistTenderID
@@ -44,7 +43,6 @@ type UpdateTenderStatus struct {
 
 func (q *UpdateTenderStatus) GetParameters(r *http.Request) error {
 	vars := mux.Vars(r)
-	q.TenderID = 0 // explicit
 	tenderIdStr := vars["tenderId"]
 	if tenderIdStr == "" {
 		return e.ErrExistTenderID
@@ -56,8 +54,6 @@ func (q *UpdateTenderStatus) GetParameters(r *http.Request) error {
 	q.TenderID = tenderId
 
 	queryParams := r.URL.Query()
-
-	q.Status = "" // explicit
 	status := queryParams.Get("status")
 	if status == "" {
 		return e.ErrTenderStatus
@@ -67,7 +63,7 @@ func (q *UpdateTenderStatus) GetParameters(r *http.Request) error {
 		return e.ErrQPChangeStatus
 	}
 	runes := []rune(statusLower)
-	q.Status = strings.ToUpper(string(runes[0])) + string(statusLower[1:len(runes)])
+	q.Status = strings.ToUpper(string(runes[0])) + string(runes[1:])
 
 	username := queryParams.Get("username")
 	if username == "" {

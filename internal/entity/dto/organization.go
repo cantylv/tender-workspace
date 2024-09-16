@@ -3,7 +3,7 @@ package dto
 // INPUT DATA FLOW
 type OrganizationInput struct {
 	Name        string `json:"name" valid:"name"`
-	Description string `json:"description" valid:"description"`
+	Description string `json:"description" valid:"-"`
 	Type        string `json:"type" valid:"-"`
 }
 

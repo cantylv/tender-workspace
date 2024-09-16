@@ -46,6 +46,6 @@ func (q *ListTenders) GetParameters(r *http.Request) error {
 		return e.ErrQPServiceType
 	}
 	runes := []rune(serviceType)
-	q.ServiceType = strings.ToUpper(string(runes[0])) + string(serviceType[1:len(runes)])
+	q.ServiceType = strings.ToUpper(string(runes[0])) + string(runes[1:])
 	return nil
 }

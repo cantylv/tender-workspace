@@ -42,6 +42,16 @@ var (
 	sqlRowGetUser = `SELECT id, username, first_name, last_name, created_at FROM employee WHERE username=$1`
 )
 
+func (r *RepoLayer) GetData(ctx context.Context, username string) (*ent.Employee, error) {
+	row := r.Client.QueryRow(ctx, sqlRowGetUser, username)
+	var uDB userDB
+	err := row.Scan(&uDB.ID, &uDB.Username, &uDB.FirstName, &uDB.LastName, &uDB.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return getUserFromDB(&uDB), nil
+}
+
 func (r *RepoLayer) Create(ctx context.Context, initData *ent.Employee) (*ent.Employee, error) {
 	timeNow := time.Now()
 	row := r.Client.QueryRow(ctx, sqlRowCreateUser, initData.Username, initData.FirstName, initData.LastName, timeNow)
@@ -51,16 +61,6 @@ func (r *RepoLayer) Create(ctx context.Context, initData *ent.Employee) (*ent.Em
 		return nil, err
 	}
 	return &u, nil
-}
-
-func (r *RepoLayer) GetData(ctx context.Context, username string) (*ent.Employee, error) {
-	row := r.Client.QueryRow(ctx, sqlRowGetUser, username)
-	var user ent.Employee
-	err := row.Scan(&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.CreatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return &user, nil
 }
 
 func (r *RepoLayer) GetUserOrganizationsIds(ctx context.Context, userId int) ([]int, error) {

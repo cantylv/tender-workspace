@@ -12,13 +12,15 @@ import (
 	"tender-workspace/internal/repo/organization"
 	"tender-workspace/internal/repo/tender"
 	"tender-workspace/internal/repo/user"
+	mc "tender-workspace/internal/utils/myconstants"
 	e "tender-workspace/internal/utils/myerrors"
 )
 
 type Usecase interface {
 	CreateBid(ctx context.Context, initData *dto.BidInput) (*ent.Bid, error)
 	GetUserBids(ctx context.Context, params *bqp.ListUserBids) ([]*ent.Bid, error)
-	// GetBidsForTender(ctx context.Context, tenderID, username string, limit, offset int) ([]*ent.Bid, error)
+	GetTenderBids(ctx context.Context, params *bqp.TenderBidList) ([]*ent.Bid, error)
+
 	GetBidStatus(ctx context.Context, params *bqp.BidStatus) (string, error)
 	UpdateBidStatus(ctx context.Context, params *bqp.UpdateBidStatus) (*ent.Bid, error)
 	UpdateBid(ctx context.Context, updateData *dto.BidUpdateDataInput, params *bqp.UpdateBidData) (*ent.Bid, error)
@@ -51,7 +53,7 @@ func (u *UsecaseLayer) CreateBid(ctx context.Context, initData *dto.BidInput) (*
 		return nil, e.ErrBadStatusCreate
 	}
 	runes := []rune(bidStatus)
-	initData.Status = strings.ToUpper(string(runes[0])) + string(runes[1:len(bidStatus)])
+	initData.Status = strings.ToUpper(string(runes[0])) + string(runes[1:])
 	// get user id
 	userData, err := u.repoUser.GetData(ctx, initData.CreatorUsername)
 	if err != nil {
@@ -61,21 +63,24 @@ func (u *UsecaseLayer) CreateBid(ctx context.Context, initData *dto.BidInput) (*
 		return nil, err
 	}
 	// check tender existing
-	_, err = u.repoTender.Get(ctx, initData.OrganizationID)
+	t, err := u.repoTender.GetTender(ctx, initData.TenderID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, e.ErrTenderExist
 		}
 		return nil, err
 	}
-	// check org existing
-	org, err := u.repoOrganization.Get(ctx, initData.OrganizationID)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, err
-	}
 	isUser := true
-	if org != nil {
-		isResponsible, err := u.repoOrganization.IsUserResponsible(ctx, initData.OrganizationID, userData.ID)
+	if initData.OrganizationID != 0 {
+		// check org existing
+		_, err = u.repoOrganization.Get(ctx, initData.OrganizationID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, e.ErrOrganizationExist
+			}
+			return nil, err
+		}
+		isResponsible, err := u.repoOrganization.IsUserResponsible(ctx, userData.ID, initData.OrganizationID)
 		if err != nil {
 			return nil, err
 		}
@@ -84,6 +89,27 @@ func (u *UsecaseLayer) CreateBid(ctx context.Context, initData *dto.BidInput) (*
 		}
 		isUser = false
 	}
+	if isUser {
+		has, err := u.repoBids.UserHasBid(ctx, userData.ID, initData.TenderID)
+		if err != nil {
+			return nil, err
+		}
+		if has {
+			return nil, e.ErrUserAlreadyHasBid
+		}
+	} else {
+		if t.OrganizationID == initData.OrganizationID {
+			return nil, e.ErrBidYourself
+		}
+		has, err := u.repoBids.OrganizationHasBid(ctx, initData.OrganizationID, initData.TenderID)
+		if err != nil {
+			return nil, err
+		}
+		if has {
+			return nil, e.ErrOrgAlreadyHasBid
+		}
+	}
+
 	props := newBid(initData, userData)
 	if isUser {
 		props.AuthorType = "User"
@@ -102,81 +128,170 @@ func (u *UsecaseLayer) GetUserBids(ctx context.Context, params *bqp.ListUserBids
 		}
 		return nil, err
 	}
+	var userBids []*ent.Bid
 	// get array of organizations ids
 	organizationsIds, err := u.repoUser.GetUserOrganizationsIds(ctx, userData.ID)
-	if err != nil {
-		return nil, e.ErrUserIsNotResponsible
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
 	}
-	var userBids []*ent.Bid
-	for _, organizationId := range organizationsIds {
-		bids, err := u.repoBids.GetOrganizationBids(ctx, organizationId)
-		if err != nil {
-			return nil, err
-		}
-		userBids = append(userBids, bids...)
-	}
-	if len(userBids) == 0 {
-		bs, err := u.repoBids.GetUserBids(ctx, userData.ID)
-		if err != nil {
-			return nil, err
-		}
-		if len(bs) != 0 {
-			userBids = append(userBids, bs...)
+	if len(organizationsIds) != 0 {
+		for _, organizationId := range organizationsIds {
+			bids, err := u.repoBids.GetOrganizationBids(ctx, organizationId)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					continue
+				}
+				return nil, err
+			}
+			if len(bids) != 0 {
+				userBids = append(userBids, bids...)
+			}
 		}
 	}
-	if params.Offset > len(userBids) {
-		return nil, e.ErrBigInterval
+	bs, err := u.repoBids.GetUserBids(ctx, userData.ID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
 	}
-	if params.Offset+params.Limit > len(userBids) {
-		return userBids[params.Offset:], nil
+	if len(bs) != 0 {
+		userBids = append(userBids, bs...)
 	}
-	return userBids[params.Offset : params.Offset+params.Limit], nil
+	if params.Offset >= len(userBids) {
+		return nil, nil
+	}
+	return userBids[params.Offset:min(params.Offset+params.Limit, len(userBids))], nil
 }
 
-func (u *UsecaseLayer) GetBidStatus(ctx context.Context, params *bqp.BidStatus) (string, error) {
-	// check that tender exists
-	_, err := u.repoBids.GetBid(ctx, params.BidID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", e.ErrNoBids
-		}
-		return "", err
-	}
+func (u *UsecaseLayer) GetTenderBids(ctx context.Context, params *bqp.TenderBidList) ([]*ent.Bid, error) {
 	// get user id
-	_, err = u.repoUser.GetData(ctx, params.Username)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", e.ErrUserExist
-		}
-		return "", err
-	}
-	status, err := u.repoBids.GetStatus(ctx, params.BidID)
-	if err != nil {
-		return "", err
-	}
-	return status, nil
-}
-
-func (u *UsecaseLayer) UpdateBidStatus(ctx context.Context, params *bqp.UpdateBidStatus) (*ent.Bid, error) {
-	// check that tender exists
-	_, err := u.repoBids.GetBid(ctx, params.BidID)
-	if err != nil {
-		return nil, e.ErrNoBids
-	}
-	// get user id
-	_, err = u.repoUser.GetData(ctx, params.Username)
+	userData, err := u.repoUser.GetData(ctx, params.Username)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, e.ErrUserExist
 		}
 		return nil, err
 	}
-	// update status
-	bid, err := u.repoBids.UpdateStatus(ctx, params.BidID, params.Status)
+	// check tender existing
+	t, err := u.repoTender.GetTender(ctx, params.TenderID)
 	if err != nil {
-		return nil, e.ErrNoBids
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, e.ErrTenderExist
+		}
+		return nil, err
 	}
-	return bid, err
+	// check user responsibility
+	isResponsible, err := u.repoOrganization.IsUserResponsible(ctx, userData.ID, t.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	if !isResponsible {
+		return nil, e.ErrResponsibilty
+	}
+	// get tender bids
+	return u.repoBids.GetTenderBids(ctx, params.TenderID)
+}
+
+func (u *UsecaseLayer) GetBidStatus(ctx context.Context, params *bqp.BidStatus) (string, error) {
+	// get user id
+	userData, err := u.repoUser.GetData(ctx, params.Username)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", e.ErrUserExist
+		}
+		return "", err
+	}
+	// check that bid exists
+	bid, err := u.repoBids.GetBid(ctx, params.BidID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", e.ErrNoBids
+		}
+		return "", err
+	}
+	// check responsibility
+	isResponsible, err := u.repoOrganization.IsUserResponsible(ctx, userData.ID, bid.OrganizationID)
+	if err != nil {
+		return "", err
+	}
+	if isResponsible {
+		return bid.Status, nil
+	}
+	// if authorType is 'User'
+	if bid.CreatorID == userData.ID {
+		return bid.Status, nil
+	}
+	// for tender side
+	t, err := u.repoTender.GetTender(ctx, bid.TenderID)
+	if err != nil {
+		return "", err
+	}
+	isResponsible, err = u.repoOrganization.IsUserResponsible(ctx, userData.ID, t.OrganizationID)
+	if err != nil {
+		return "", err
+	}
+	if isResponsible {
+		if bid.Status == "Published" {
+			return bid.Status, nil
+		}
+		return "", e.ErrBadPermission
+	}
+	return "", e.ErrBadPermission
+}
+
+func (u *UsecaseLayer) UpdateBidStatus(ctx context.Context, params *bqp.UpdateBidStatus) (*ent.Bid, error) {
+	// get user id
+	userData, err := u.repoUser.GetData(ctx, params.Username)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, e.ErrUserExist
+		}
+		return nil, err
+	}
+	// check that bid exists
+	bid, err := u.repoBids.GetBid(ctx, params.BidID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, e.ErrNoBids
+		}
+		return nil, err
+	}
+	hasCreatorPrivilege := false
+	// if authorType is 'User'
+	if bid.CreatorID == userData.ID {
+		hasCreatorPrivilege = true
+	}
+	// check responsibility
+	isResponsible, err := u.repoOrganization.IsUserResponsible(ctx, userData.ID, bid.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	if isResponsible || hasCreatorPrivilege {
+		statusLower := strings.ToLower(params.Status)
+		if _, ok := mc.AvaliableBidStatusCreator[statusLower]; !ok {
+			return nil, e.ErrSetDeprecatedStatus
+		}
+		runes := []rune(statusLower)
+		params.Status = strings.ToUpper(string(runes[0])) + string(runes[1:])
+		return u.repoBids.UpdateStatus(ctx, params.BidID, params.Status, bid.Version+1)
+	}
+	// for tender side
+	t, err := u.repoTender.GetTender(ctx, bid.TenderID)
+	if err != nil {
+		return nil, err
+	}
+	isResponsible, err = u.repoOrganization.IsUserResponsible(ctx, userData.ID, t.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	if isResponsible {
+		statusLower := strings.ToLower(params.Status)
+		if _, ok := mc.AvaliableBidStatusApprover[statusLower]; !ok {
+			return nil, e.ErrSetDeprecatedStatus
+		}
+		runes := []rune(statusLower)
+		params.Status = strings.ToUpper(string(runes[0])) + string(runes[1:])
+		return u.repoBids.UpdateStatus(ctx, params.BidID, params.Status, bid.Version+1)
+	}
+	return nil, e.ErrBadPermission
 }
 
 func (u *UsecaseLayer) UpdateBid(ctx context.Context, updateData *dto.BidUpdateDataInput, params *bqp.UpdateBidData) (*ent.Bid, error) {

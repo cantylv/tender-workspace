@@ -12,7 +12,6 @@ import (
 	"tender-workspace/internal/repo/tender"
 	"tender-workspace/internal/repo/user"
 	mc "tender-workspace/internal/utils/myconstants"
-	"tender-workspace/internal/utils/myerrors"
 	e "tender-workspace/internal/utils/myerrors"
 )
 
@@ -71,14 +70,14 @@ func (u *UsecaseLayer) CreateTender(ctx context.Context, initData *dto.TenderInp
 		return nil, e.ErrBadStatusCreate
 	}
 	runes := []rune(tenderStatus)
-	initData.Status = strings.ToUpper(string(runes[0])) + string(runes[1:len(tenderStatus)])
+	initData.Status = strings.ToUpper(string(runes[0])) + string(runes[1:])
 
 	serviceType := strings.ToLower(initData.Type)
 	if _, ok := mc.AvaliableServiceType[serviceType]; !ok {
 		return nil, e.ErrQPServiceType
 	}
 	runes = []rune(serviceType)
-	initData.Type = strings.ToUpper(string(runes[0])) + string(runes[1:len(serviceType)])
+	initData.Type = strings.ToUpper(string(runes[0])) + string(runes[1:])
 	// get user id
 	userData, err := u.repoUser.GetData(ctx, initData.CreatorUsername)
 	if err != nil {
@@ -95,7 +94,8 @@ func (u *UsecaseLayer) CreateTender(ctx context.Context, initData *dto.TenderInp
 		}
 		return nil, err
 	}
-	isResponsible, err := u.repoOrganization.IsUserResponsible(ctx, initData.OrganizationID, userData.ID)
+	// check user responsibility
+	isResponsible, err := u.repoOrganization.IsUserResponsible(ctx, userData.ID, initData.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -128,25 +128,30 @@ func (u *UsecaseLayer) GetUserTenders(ctx context.Context, params *tqp.ListUserT
 	for _, organizationId := range organizationsIds {
 		tenders, err := u.repoTenders.GetOrganizationTenders(ctx, organizationId)
 		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				continue
+			}
 			return nil, err
 		}
-		userTenders = append(userTenders, tenders...)
+		if len(tenders) != 0 {
+			userTenders = append(userTenders, tenders...)
+		}
 	}
 
-	if params.Offset > len(userTenders) {
-		return nil, e.ErrBigInterval
+	if params.Offset >= len(userTenders) {
+		return nil, nil
 	}
-	if params.Offset+params.Limit > len(userTenders) {
-		return userTenders[params.Offset:], nil
-	}
-	return userTenders[params.Offset : params.Offset+params.Limit], nil
+	return userTenders[params.Offset:min(params.Offset+params.Limit, len(userTenders))], nil
 }
 
 func (u *UsecaseLayer) GetTenderStatus(ctx context.Context, params *tqp.TenderStatus) (string, error) {
 	// check that tender exists
 	tender, err := u.repoTenders.GetTender(ctx, params.TenderID)
 	if err != nil {
-		return "", e.ErrNoTenders
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", e.ErrNoTenders
+		}
+		return "", err
 	}
 	// get user id
 	userData, err := u.repoUser.GetData(ctx, params.Username)
@@ -190,7 +195,7 @@ func (u *UsecaseLayer) UpdateTenderStatus(ctx context.Context, params *tqp.Updat
 		return nil, e.ErrResponsibilty
 	}
 	// update status
-	tender, err = u.repoTenders.ChangeStatus(ctx, params.TenderID, params.Status)
+	tender, err = u.repoTenders.ChangeStatus(ctx, params.TenderID, tender.Version+1, params.Status)
 	if err != nil {
 		return nil, err
 	}
@@ -200,10 +205,10 @@ func (u *UsecaseLayer) UpdateTenderStatus(ctx context.Context, params *tqp.Updat
 func (u *UsecaseLayer) UpdateTender(ctx context.Context, updateData *dto.TenderUpdateDataInput, params *tqp.TenderUpdate) (*ent.Tender, error) {
 	serviceType := strings.ToLower(updateData.ServiceType)
 	if _, ok := mc.AvaliableServiceType[serviceType]; !ok {
-		return nil, myerrors.ErrQPServiceType
+		return nil, e.ErrQPServiceType
 	}
 	runes := []rune(serviceType)
-	updateData.ServiceType = strings.ToUpper(string(runes[0])) + string(serviceType[1:len(runes)])
+	updateData.ServiceType = strings.ToUpper(string(runes[0])) + string(runes[1:])
 	// check that tender exists
 	tender, err := u.repoTenders.GetTender(ctx, params.TenderID)
 	if err != nil {
@@ -228,7 +233,7 @@ func (u *UsecaseLayer) UpdateTender(ctx context.Context, updateData *dto.TenderU
 	// update status
 	tenderData := newUpdateTenderData(updateData)
 	tenderProps := newUpdateTenderProps(params, userData)
-	tender, err = u.repoTenders.Update(ctx, tenderData, tenderProps)
+	tender, err = u.repoTenders.Update(ctx, tenderData, tenderProps, tender.Version+1)
 	if err != nil {
 		return nil, err
 	}

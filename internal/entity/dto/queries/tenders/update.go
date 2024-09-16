@@ -15,7 +15,6 @@ type TenderUpdate struct {
 
 func (q *TenderUpdate) GetParameters(r *http.Request) error {
 	vars := mux.Vars(r)
-	q.TenderID = 0 // explicit
 	tenderIdStr := vars["tenderId"]
 	if tenderIdStr == "" {
 		return e.ErrExistTenderID
