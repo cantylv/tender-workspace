@@ -203,7 +203,7 @@ func (d *DeliveryLayer) GetBidStatus(w http.ResponseWriter, r *http.Request) {
 	err := queryParams.GetParameters(r)
 	if err != nil {
 		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
-		if errors.Is(err, e.ErrExistTenderID) || errors.Is(err, e.ErrTenderID) {
+		if errors.Is(err, e.ErrExistBidID) || errors.Is(err, e.ErrBidID) {
 			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusBadRequest, mc.ApplicationJson)
 			f.Response(propsError)
 			return
@@ -293,7 +293,7 @@ func (d *DeliveryLayer) UpdateBidStatus(w http.ResponseWriter, r *http.Request) 
 }
 
 func (d *DeliveryLayer) UpdateBid(w http.ResponseWriter, r *http.Request) {
-	requestId := r.Context().Value(mc.RequestID).(string)
+	requestId := r.Context().Value(mc.ContextKey(mc.RequestID)).(string)
 	if r.Method != "PATCH" {
 		d.logger.Info(e.ErrMethodNotAllowed.Error(), zap.String(mc.RequestID, requestId))
 		propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: e.ErrMethodNotAllowed.Error()}, http.StatusMethodNotAllowed, mc.ApplicationJson)
@@ -353,6 +353,59 @@ func (d *DeliveryLayer) UpdateBid(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, e.ErrNoTenders) {
+			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusBadRequest, mc.ApplicationJson)
+			f.Response(propsError)
+			return
+		}
+		propsError := f.NewResponseProps(w, ent.ResponseError{Error: e.ErrInternal.Error()},
+			http.StatusInternalServerError, mc.ApplicationJson)
+		f.Response(propsError)
+		return
+	}
+
+	bidOutput := dto.NewBidOutput(bid)
+	responseData := f.NewResponseProps(w, bidOutput, http.StatusOK, mc.ApplicationJson)
+	f.Response(responseData)
+}
+
+func (d *DeliveryLayer) SubmitDecision(w http.ResponseWriter, r *http.Request) {
+	requestId := r.Context().Value(mc.ContextKey(mc.RequestID)).(string)
+	if r.Method != "PUT" {
+		d.logger.Info(e.ErrMethodNotAllowed.Error(), zap.String(mc.RequestID, requestId))
+		propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: e.ErrMethodNotAllowed.Error()}, http.StatusMethodNotAllowed, mc.ApplicationJson)
+		f.Response(propsError)
+		return
+	}
+
+	queryParams := new(bqp.SubmitDecision)
+	err := queryParams.GetParameters(r)
+	if err != nil {
+		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
+		if errors.Is(err, e.ErrExistBidID) || errors.Is(err, e.ErrBidID) || errors.Is(err, e.ErrQPDecision) {
+			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusBadRequest, mc.ApplicationJson)
+			f.Response(propsError)
+			return
+		}
+		if errors.Is(err, e.ErrBadPermission) {
+			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusUnauthorized, mc.ApplicationJson)
+			f.Response(propsError)
+			return
+		}
+		propsError := f.NewResponseProps(w, ent.ResponseError{Error: e.ErrInternal.Error()},
+			http.StatusInternalServerError, mc.ApplicationJson)
+		f.Response(propsError)
+		return
+	}
+
+	bid, err := d.ucBids.UpdateBidStatus(r.Context(), newUpdateBidStatusParams(queryParams))
+	if err != nil {
+		d.logger.Info(err.Error(), zap.String(mc.RequestID, requestId))
+		if errors.Is(err, e.ErrUserExist) {
+			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusUnauthorized, mc.ApplicationJson)
+			f.Response(propsError)
+			return
+		}
+		if errors.Is(err, e.ErrNoBids) || errors.Is(err, e.ErrSetDeprecatedStatus) || errors.Is(err, e.ErrBadPermission) {
 			propsError := f.NewResponseProps(w, ent.ResponseReason{Reason: err.Error()}, http.StatusBadRequest, mc.ApplicationJson)
 			f.Response(propsError)
 			return

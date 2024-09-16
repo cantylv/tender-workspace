@@ -29,8 +29,8 @@ func InitHandlers(r *mux.Router, psqlConn *pgx.Conn, logger *zap.Logger) {
 	r.HandleFunc("/bids/{tenderId}/list", bDelivery.GetTenderListOfBids)
 	r.HandleFunc("/bids/{bidId}/status", bDelivery.GetBidStatus).Methods("GET")
 	r.HandleFunc("/bids/{bidId}/status", bDelivery.UpdateBidStatus).Methods("PUT")
-	// r.HandleFunc("/bids/{bidId}/edit", tDelivery.UpdateTender)
-	// r.HandleFunc("/bids/{bidId}/submit_decision")
+	r.HandleFunc("/bids/{bidId}/edit", bDelivery.UpdateBid)
+	r.HandleFunc("/bids/{bidId}/submit_decision", bDelivery.SubmitDecision)
 	// r.HandleFunc("/bids/{bidId}/rollback/{version}")
 	// r.HandleFunc("/bids/{tenderId}/reviews")
 	// надо еще добавить rollback

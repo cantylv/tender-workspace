@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"strconv"
 	e "tender-workspace/internal/utils/myerrors"
+
+	"github.com/gorilla/mux"
 )
 
 type UpdateBidData struct {
@@ -12,21 +14,17 @@ type UpdateBidData struct {
 }
 
 func (q *UpdateBidData) GetParameters(r *http.Request) error {
-	q.BidID = 0 // explicit
-	bidIdStr := r.Header.Get("bidId")
+	bidIdStr := mux.Vars(r)["bidId"]
 	if bidIdStr == "" {
-		return e.ErrExistTenderID
+		return e.ErrExistBidID
 	}
 	bidId, err := strconv.Atoi(bidIdStr)
-	if err != nil {
-		return e.ErrTenderID
-	}
-	if bidId < 1 {
-		return e.ErrTenderID
+	if err != nil || bidId < 1 {
+		return e.ErrBidID
 	}
 	q.BidID = bidId
 
-	username := r.Header.Get("username")
+	username := r.URL.Query().Get("username")
 	if username == "" {
 		return e.ErrBadPermission
 	}

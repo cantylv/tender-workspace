@@ -296,23 +296,31 @@ func (u *UsecaseLayer) UpdateBidStatus(ctx context.Context, params *bqp.UpdateBi
 
 func (u *UsecaseLayer) UpdateBid(ctx context.Context, updateData *dto.BidUpdateDataInput, params *bqp.UpdateBidData) (*ent.Bid, error) {
 	// check that bid exists
-	_, err := u.repoBids.GetBid(ctx, params.BidID)
+	bid, err := u.repoBids.GetBid(ctx, params.BidID)
 	if err != nil {
 		return nil, e.ErrNoBids
 	}
 	// get user id
-	_, err = u.repoUser.GetData(ctx, params.Username)
+	user, err := u.repoUser.GetData(ctx, params.Username)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, e.ErrUserExist
 		}
 		return nil, err
 	}
-	// update status
-	tenderData := newUpdateBidProps(params, updateData)
-	bid, err := u.repoBids.Update(ctx, tenderData)
+	// check user responsibility
+	isResponsible, err := u.repoOrganization.IsUserResponsible(ctx, user.ID, bid.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
-	return bid, err
+	if isResponsible || bid.CreatorID == user.ID {
+		// update status
+		bidData := newUpdateBidProps(params, updateData)
+		bid, err := u.repoBids.Update(ctx, bidData, bid.Version+1)
+		if err != nil {
+			return nil, err
+		}
+		return bid, err
+	}
+	return nil, e.ErrResponsibilty
 }

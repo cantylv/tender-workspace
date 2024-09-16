@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	ent "tender-workspace/internal/entity"
-	f "tender-workspace/internal/utils/functions"
 	mc "tender-workspace/internal/utils/myconstants"
 	"time"
 
@@ -43,7 +42,7 @@ type Repo interface {
 	GetBid(ctx context.Context, bidID int) (*ent.Bid, error)
 	GetStatus(ctx context.Context, bidID int) (string, error)
 	UpdateStatus(ctx context.Context, bidID int, status string, newBidVersion int) (*ent.Bid, error)
-	Update(ctx context.Context, newData *UpdateBid) (*ent.Bid, error)
+	Update(ctx context.Context, newData *UpdateBid, newBidVersion int) (*ent.Bid, error)
 	GetTenderBids(ctx context.Context, tenderID int) ([]*ent.Bid, error)
 	GetOrganizationBids(ctx context.Context, organizationID int) ([]*ent.Bid, error)
 	GetUserBids(ctx context.Context, creatorID int) ([]*ent.Bid, error)
@@ -129,34 +128,62 @@ func (r *RepoLayer) UpdateStatus(ctx context.Context, bidId int, status string, 
 	return newBid(&bidDB), nil
 }
 
-func (r *RepoLayer) Update(ctx context.Context, newData *UpdateBid) (*ent.Bid, error) {
-	query, args := getUpdateSqlQuery(newData)
-	row := r.Client.QueryRow(ctx, query+" RETURN id, name, description, status, version, tender_id, creator_id, author_type, organization_id, created_at", args...)
-	var b ent.Bid
-	err := row.Scan(
-		&b.ID,
-		&b.Name,
-		&b.Status,
-		&b.Version,
-		&b.TenderID,
-		&b.CreatorID,
-		&b.CreatedAt,
+func (r *RepoLayer) Update(ctx context.Context, newData *UpdateBid, newBidVersion int) (*ent.Bid, error) {
+	query, args := updateSqlQuery(newData, newBidVersion)
+	tx, err := r.Client.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	// Откат транзакции в случае ошибки
+	defer func() {
+		if err != nil {
+			tx.Rollback(ctx)
+		}
+	}()
+	tag, err := tx.Exec(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, err
+	}
+	row := tx.QueryRow(ctx, `SELECT id, name, description, status, version, tender_id, creator_id, author_type, organization_id, created_at FROM bids WHERE id=$1`, newData.BidID)
+	var bidDB bidDB
+	err = row.Scan(
+		&bidDB.ID,
+		&bidDB.Name,
+		&bidDB.Description,
+		&bidDB.Status,
+		&bidDB.Version,
+		&bidDB.TenderID,
+		&bidDB.CreatorID,
+		&bidDB.AuthorType,
+		&bidDB.OrganizationID,
+		&bidDB.CreatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
-	return &b, err
+	if err = tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	return newBid(&bidDB), nil
 }
 
-func getUpdateSqlQuery(newTenderData *UpdateBid) (string, []any) {
-	sb := sqlbuilder.NewUpdateBuilder().Update("bids").Where("bidId", fmt.Sprintf("%d", newTenderData.BidID))
-	if newTenderData.Name != "" {
-		sb = sb.Set("name", newTenderData.Name)
+func updateSqlQuery(newData *UpdateBid, newBidVersion int) (string, []any) {
+	sb := sqlbuilder.PostgreSQL.NewUpdateBuilder().Update("bids")
+	// Собираем все изменения
+	var updates []string
+
+	if newData.Name != "" {
+		updates = append(updates, sb.Assign("name", newData.Name))
 	}
-	if newTenderData.Description != "" {
-		sb = sb.Set("description", newTenderData.Description)
+	if newData.Description != "" {
+		updates = append(updates, sb.Assign("description", newData.Description))
 	}
-	sb = sb.Set("updated_at", f.FormatTime(time.Now()))
+	updates = append(updates, sb.Assign("updated_at", time.Now()), sb.Assign("version", newBidVersion))
+	sb.Set(updates...)
+	sb.Where(sb.Equal("id", newData.BidID))
 	return sb.Build()
 }
 
